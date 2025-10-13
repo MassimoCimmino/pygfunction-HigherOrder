@@ -58,10 +58,10 @@ class Basis:
             functions.
 
         """
-        return self._basis_function(xi, self._psi_coefs)
+        return cls._basis_function(xi, cls._psi_coefs)
 
-    @staticmethod
-    def _basis_function(xi: npt.ArrayLike, psi_coefs: np.ndarray) -> np.ndarray:
+    @classmethod
+    def _basis_function(cls, xi: npt.ArrayLike, psi_coefs: np.ndarray) -> np.ndarray:
         """Polynomial basis functions.
 
         Parameters
