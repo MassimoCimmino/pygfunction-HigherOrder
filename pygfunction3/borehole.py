@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+from functools import cached_property
 from typing_extensions import Self     # for compatibility with Python <= 3.10
 import warnings
 
 import numpy as np
+import numpy.typing as npt
 
 
 class Borehole(object):
@@ -40,37 +42,18 @@ class Borehole(object):
         self.p_head = p_head
         # Borehole inclination
         self.tilt = float(tilt)
-
-        # Check if borehole is inclined
-        self._is_tilted = np.abs(self.tilt) > 1.0e-6
         # Borehole orientation
-        if self._is_tilted:
+        if self.is_tilted:
             self.orientation = float(orientation)
         else:
             self.orientation = 0.
-        # Unit vector along the borehole axis
-        self._unit_vector = np.array([
-            np.sin(self.tilt) * np.cos(self.orientation),
-            np.sin(self.tilt) * np.sin(self.orientation),
-            -np.cos(self.tilt)
-        ])
-        # Top and bottom end positions
-        self.p_middle = np.array([
-            self.p_head[0] + 0.5 * self.L * np.sin(self.tilt) * np.cos(self.orientation),
-            self.p_head[1] + 0.5 * self.L * np.sin(self.tilt) * np.sin(self.orientation),
-            -self.D - 0.5 * self.L * np.cos(self.tilt)
-        ])
-        self.p_top = self._position(
-            -1., self.L, self.p_middle, self.unit_vector)
-        self.p_bottom = self._position(
-            1., self.L, self.p_middle, self.unit_vector)
 
     def __repr__(self):
         s = (f'Borehole(H={self.H}, D={self.D}, r_b={self.r_b}, p={self.p},'
              f' tilt={self.tilt}, orientation={self.orientation})')
         return s
 
-    @property
+    @cached_property
     def is_tilted(self) -> bool:
         """
         Returns true if the borehole is inclined.
@@ -81,9 +64,9 @@ class Borehole(object):
             True if borehole is inclined.
 
         """
-        return self._is_tilted
+        return np.abs(self.tilt) > 1.0e-6
 
-    @property
+    @cached_property
     def is_vertical(self) -> bool:
         """
         Returns true if the borehole is vertical.
@@ -94,9 +77,9 @@ class Borehole(object):
             True if borehole is vertical.
 
         """
-        return not self._is_tilted
-    
-    @property
+        return not self.is_tilted
+
+    @cached_property
     def unit_vector(self) -> np.ndarray:
         """
         Returns the unit vector along the borehole axis.
@@ -113,16 +96,119 @@ class Borehole(object):
         [ 0.  0. -1.]
 
         """
-        return self._unit_vector
+        unit_vector = np.array([
+            np.sin(self.tilt) * np.cos(self.orientation),
+            np.sin(self.tilt) * np.sin(self.orientation),
+            -np.cos(self.tilt)
+        ])
+        return unit_vector
 
-    def position(self, s):
+    @cached_property
+    def p_top(self) -> np.ndarray:
+        """
+        Returns the position of the top of the borehole.
+
+        Returns
+        -------
+        array
+            Position (x, y, z) (in meters) of the top of the borehole.
+
+        Examples
+        --------
+        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
+        >>> b1.p_top
+        [ 5.  0. -4.]
+
+        """
+        return self.position(-1.)
+
+    @cached_property
+    def p_middle(self) -> np.ndarray:
+        """
+        Returns the position of the middle of the borehole.
+
+        Returns
+        -------
+        array
+            Position (x, y, z) (in meters) of the middle of the borehole.
+
+        Examples
+        --------
+        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
+        >>> b1.p_middle
+        [ 5.   0. -79.]
+
+        """
+        p_middle = np.array([
+            self.p_head[0] + 0.5 * self.L * np.sin(self.tilt) * np.cos(self.orientation),
+            self.p_head[1] + 0.5 * self.L * np.sin(self.tilt) * np.sin(self.orientation),
+            -self.D - 0.5 * self.L * np.cos(self.tilt)
+        ])
+        return p_middle
+
+    @cached_property
+    def p_bottom(self) -> np.ndarray:
+        """
+        Returns the position of the bottom of the borehole.
+
+        Returns
+        -------
+        array
+            Position (x, y, z) (in meters) of the bottom of the borehole.
+
+        Examples
+        --------
+        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
+        >>> b1.p_bottom
+        [ 5.  0. -154.]
+
+        """
+        return self.position(1.)
+
+    def axial_position(self, p: npt.ArrayLike) -> np.ndarray:
+        """
+        Returns the axial position with regard to the top of the borehole.
+
+        Parameters
+        ----------
+        p : array-like
+            Point(s) (x, y, z) (in meters) for which to compute the axial position.
+
+        Returns
+        -------
+        s : array
+            Axial position (in meters) along the borehole.
+
+        """
+        p_proj = self.projection(p)
+        s = self._axial_position(p_proj, self.p_top, self.unit_vector)
+        return s
+
+    def longitudinal_position(self, xi: npt.ArrayLike) -> np.ndarray:
+        """
+        Returns the longitudinal position along the borehole.
+
+        Parameters
+        ----------
+        xi : array-like
+            Coordinate or (M,) array of coordinates along the borehole.
+
+        Returns
+        -------
+        s : array
+            Longitudinal position (in meters) along the borehole.
+
+        """
+        return self._longitudinal_position(xi, self.L)
+
+    def position(self, xi: npt.ArrayLike) -> np.ndarray:
         """
         Returns the position along the borehole.
 
         Parameters
         ----------
-        s : float
-            Longitudinal position along the borehole (in meters).
+        xi : array-like
+            Coordinate or (M,) array of coordinates along the borehole
 
         Returns
         -------
@@ -132,82 +218,112 @@ class Borehole(object):
         Examples
         --------
         >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1.position(75.)
-        [5.0, 0.0, -79.0]
+        >>> b1.position(-1.)
+        [ 5.  0. -4.]
 
         """
-        xi = self._coordinate(s, self.L)
         p = self._position(xi, self.L, self.p_middle, self.unit_vector)
         return p
 
-    def axial_distance(self, s, p):
-        xi = self._coordinate(s, self.L)
-        p_proj = self._projection(p, self.p_middle, self.unit_vector)
-        p_self = self._position(xi, self.L, self.p_middle, self.unit_vector)
-        dz = self._axial_distance(p_proj, p_self, self.unit_vector)
-        return dz
-
-    def radial_distance(self, p, r_min=None):
-        p_proj = self._projection(p, self.p_middle, self.unit_vector)
-        r = self._radial_distance(p_proj, p, self.unit_vector, r_min=r_min)
-        return r
-    
-    @classmethod
-    def _axial_distance(cls, p_proj, p_self, unit_vector):
+    def projection(self, p: npt.ArrayLike) -> np.ndarray:
         """
-
-        """
-        if p_proj.ndim == 2 and p_self.ndim == 2:
-            dp = p_proj - p_self[:, np.newaxis, ...]
-        else:
-            dp = p_proj - p_self
-        # dz = np.linalg.norm(dp, axis=-1)
-        dz = dp @ unit_vector
-        return dz
-
-    @classmethod
-    def _projection(cls, p, p_middle, unit_vector):
-        dp = p - p_middle
-        p_proj = p_middle + np.multiply.outer(
-            dp @ unit_vector,
-            unit_vector
-            )
-        return p_proj
-    
-    @classmethod
-    def _radial_distance(cls, p_proj, p, unit_vector, r_min=None):
-        """
-
-        """
-        dp = p_proj - p
-        r = np.linalg.norm(
-            dp,
-            axis=-1
-        )
-        if r_min is not None:
-            r = np.sqrt(r**2 + r_min**2)
-        return r
-
-    @classmethod
-    def _coordinate(cls, s, L):
-        """
-        Returns the coordinates xi along the borehole.
+        Returns the projection of a point onto the borehole axis.
 
         Parameters
         ----------
-        s : float
-            Longitudinal position along the borehole (in meters).
+        p : array-like
+            Point(s) (x, y, z) (in meters) to be projected onto the borehole axis.
 
         Returns
         -------
-        xi : float
-            Coordinate along the borehole.
+        p_proj : array
+            Projected point(s) (x, y, z) (in meters) onto the borehole axis.
 
         """
-        if isinstance(s, list):
-            s = np.atleast_1d(s)
-        xi = -1. + 2 * s / L
-        return xi
+        p_proj = self._projection(p, self.p_middle, self.unit_vector)
+        return p_proj
+
+    def radial_axial_position(self, p: npt.ArrayLike, r_min=None) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Returns the radial distance from the borehole axis and the axial position.
+
+        Parameters
+        ----------
+        p : array-like
+            Point(s) (x, y, z) (in meters) for which to compute the radial distance and axial position.
+        r_min : float or None, optional
+            Minimum radius (in meters) to avoid singularities. If not None,
+            the returned radial distance is ``sqrt(r**2 + r_min**2)``.
+            Default is None.
+
+        Returns
+        -------
+        r : array
+            Radial distance (in meters) from the borehole axis.
+        s : array
+            Axial distance (in meters) along the borehole.
+
+        """
+        p_proj = self.projection(p)
+        r = self._radial_position(p_proj, p, r_min=r_min)
+        s = self._axial_position(p_proj, self.p_top, self.unit_vector)
+        return r, s
+
+    def radial_position(self, p: npt.ArrayLike, r_min=None) -> np.ndarray:
+        """
+        Returns the radial distance from the borehole axis.
+
+        Parameters
+        ----------
+        p : array-like
+            Point(s) (x, y, z) (in meters) for which to compute the radial distance.
+        r_min : float or None, optional
+            Minimum radius (in meters) to avoid singularities. If not None,
+            the returned radial distance is ``sqrt(r**2 + r_min**2)``.
+            Default is None.
+
+        Returns
+        -------
+        r : array
+            Radial distance (in meters) from the borehole axis.
+
+        """
+        p_proj = self.projection(p)
+        r = self._radial_position(p_proj, p, r_min=r_min)
+        return r
+
+    @classmethod
+    def _axial_position(cls, p_proj, p_top, unit_vector):
+        """
+
+        """
+        if p_proj.ndim == 2 and p_top.ndim == 2:
+            dp = p_proj - p_top[:, np.newaxis, ...]
+        else:
+            dp = p_proj - p_top
+        s = dp @ unit_vector
+        return s
+
+    @classmethod
+    def _longitudinal_position(cls, xi, L):
+        """
+        Returns the longitudinal position along the borehole.
+
+        Parameters
+        ----------
+        xi : array-like
+            Coordinate or (M,) array of coordinates along the borehole.
+
+        Returns
+        -------
+        s : float or array
+            Longitudinal position (in meters) along the borehole.
+
+        """
+        if isinstance(xi, list):
+            xi = np.atleast_1d(xi)
+        s = 0.5 * L * (xi + 1.)
+        return s
 
     @classmethod
     def _position(cls, xi, L, p_middle, unit_vector):
@@ -234,12 +350,27 @@ class Borehole(object):
         if isinstance(xi, list):
             xi = np.atleast_1d(xi)
         p = p_middle + 0.5 * L * np.multiply.outer(xi, unit_vector)
-        # p = np.stack(
-        #     [
-        #         p_head[0] + 0.5 * L * np.sin(tilt) * np.cos(orientation) * (1. + xi),
-        #         p_head[1] + 0.5 * L * np.sin(tilt) * np.sin(orientation) * (1. + xi),
-        #         -D - 0.5 * L * np.cos(tilt) * (1. + xi)
-        #     ],
-        #     axis=-1
-        # )
         return p
+
+    @classmethod
+    def _projection(cls, p, p_middle, unit_vector):
+        dp = p - p_middle
+        p_proj = p_middle + np.multiply.outer(
+            dp @ unit_vector,
+            unit_vector
+            )
+        return p_proj
+
+    @classmethod
+    def _radial_position(cls, p_proj, p, r_min=None):
+        """
+
+        """
+        dp = p_proj - p
+        r = np.linalg.norm(
+            dp,
+            axis=-1
+        )
+        if r_min is not None:
+            r = np.sqrt(r**2 + r_min**2)
+        return r

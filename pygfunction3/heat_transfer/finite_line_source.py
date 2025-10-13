@@ -16,12 +16,13 @@ def finite_line_source(
         p,
         borehole,
         basis,
+        r_min: float = 0.,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
 
     if real_source or mirror_source:
-        integrand = _finite_line_source_integrand(p, borehole, basis, real_source=real_source, mirror_source=mirror_source)
+        integrand = _finite_line_source_integrand(p, borehole, basis, r_min=r_min, real_source=real_source, mirror_source=mirror_source)
         h = quad_vec(
             integrand,
             -1., 1.,
@@ -40,20 +41,25 @@ def _finite_line_source_integrand(
         p,
         borehole,
         basis,
+        r_min: float = 0.,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> Callable:
 
+    # Real points
+    if real_source:
+        r, s = borehole.radial_axial_position(p, r_min=r_min)
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
+        r_mirror, s_mirror = borehole.radial_axial_position(p_mirror, r_min=r_min)
 
     # Integration function
     if real_source and mirror_source:
         def integrand(xi, time, alpha):
-            p_self = borehole._position(xi, borehole.L, borehole.p_middle, borehole.unit_vector)
-            dis = np.linalg.norm(p - p_self, axis=-1)
-            dis_mirror = np.linalg.norm(p_mirror - p_self, axis=-1)
+            s_self = borehole.longitudinal_position(xi)
+            dis = np.sqrt(r**2 + (s - s_self)**2)
+            dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = basis.basis_function(xi)
             two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
             dh = 0.25 * borehole.L * np.multiply.outer(
@@ -64,8 +70,8 @@ def _finite_line_source_integrand(
             return dh
     elif real_source:
         def integrand(xi, time, alpha):
-            p_self = borehole._position(xi, borehole.L, borehole.p_middle, borehole.unit_vector)
-            dis = np.linalg.norm(p - p_self, axis=-1)
+            s_self = borehole.longitudinal_position(xi)
+            dis = np.sqrt(r**2 + (s - s_self)**2)
             psi = basis.basis_function(xi)
             two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
             dh = 0.25 * borehole.L * np.multiply.outer(
@@ -75,8 +81,8 @@ def _finite_line_source_integrand(
             return dh
     elif mirror_source:
         def integrand(xi, time, alpha):
-            p_self = borehole._position(xi, borehole.L, borehole.p_middle, borehole.unit_vector)
-            dis_mirror = np.linalg.norm(p_mirror - p_self, axis=-1)
+            s_self = borehole.longitudinal_position(xi)
+            dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = basis.basis_function(xi)
             two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
             dh = -0.25 * borehole.L * np.multiply.outer(
@@ -89,6 +95,7 @@ def _finite_line_source_integrand(
         def integrand(xi, time, alpha):
             shape = np.shape(time) + tuple(np.ones(np.ndim(p), dtype=int))
             dh = np.zeros(shape)
+            return dh
 
     return integrand
 
