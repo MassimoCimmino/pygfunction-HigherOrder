@@ -58,7 +58,7 @@ class Basis:
             functions.
 
         """
-        return cls._basis_function(xi, cls._psi_coefs)
+        return self._basis_function(xi, self._psi_coefs)
 
     @classmethod
     def _basis_function(cls, xi: npt.ArrayLike, psi_coefs: np.ndarray) -> np.ndarray:
