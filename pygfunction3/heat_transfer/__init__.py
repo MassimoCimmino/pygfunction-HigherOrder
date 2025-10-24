@@ -1,3 +1,4 @@
-from .finite_line_source import finite_line_source
+from .finite_line_source import finite_line_source, _integral, _finite_line_source_recurrence
 from .zeroth_order_finite_line_source import zeroth_order_finite_line_source
 from .first_order_finite_line_source import first_order_finite_line_source
+from ._inner_integral import _zeroth_order_inner_integral, _first_order_inner_integral, _inner_integral
