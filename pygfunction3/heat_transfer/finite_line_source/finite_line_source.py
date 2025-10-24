@@ -12,7 +12,7 @@ from scipy.special import erfc, erfcx
 from .first_order_finite_line_source import _first_order_integral
 from .zeroth_order_finite_line_source import _zeroth_order_finite_line_source
 from ._inner_integral import _inner_integral
-from ..utils import mirror_point
+from ...utils import mirror_point
 
 
 def finite_line_source(
@@ -20,24 +20,37 @@ def finite_line_source(
         alpha: float,
         p: npt.ArrayLike,
         borehole,
-        basis,
+        n: int,
         r_min: float = 0.,
+        method: str = 'recurrence',
+        deg: int | None = None,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
-
-    if real_source or mirror_source:
-        integrand = _finite_line_source_integrand(p, borehole, basis, r_min=r_min, real_source=real_source, mirror_source=mirror_source)
-        I = quad_vec(
-            integrand,
-            -1., 1.,
-            args=(time, alpha),
-            epsabs=1.0e-6,
-            epsrel=1.0e-6
-        )[0]
+    """Finite line source solution of order n."""
+    # Lower bound of integration
+    u = 1 / np.sqrt(4 * alpha * time)
+    # Real points
+    if real_source:
+        r, s = borehole.radial_axial_position(p, r_min=r_min)
+    else:
+        r = np.empty(p.shape[:-1])
+        s = np.empty(p.shape[:-1])
+    # Mirror points
+    if mirror_source:
+        p_mirror = mirror_point(p)
+        r_mirror, s_mirror = borehole.radial_axial_position(p_mirror, r_min=r_min)
+    else:
+        r_mirror = np.empty(p.shape[:-1])
+        s_mirror = np.empty(p.shape[:-1])
+    # Finite line source solution
+    if method.lower() == 'recurrence':
+        I = _finite_line_source_recurrence(u, borehole.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+    elif method.lower() == 'integral':
+        I = _finite_line_source_integral(u, borehole.L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
     else:
         # TODO: return zeros of correct shape
-        shape = np.shape(time) + tuple(np.ones(np.ndim(p), dtype=int))
+        shape = np.shape(u) + np.shape(s) + (n,)
         I = np.zeros(shape)
     return I
 
@@ -52,66 +65,71 @@ def _boundary_integral(u, r, s):
 
 
 def _finite_line_source_integrand(
-        p,
-        borehole,
-        basis,
-        r_min: float = 0.,
+        u,
+        L,
+        r,
+        s,
+        r_mirror,
+        s_mirror,
+        n,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> Callable:
 
-    # Real points
-    if real_source:
-        r, s = borehole.radial_axial_position(p, r_min=r_min)
-    # Mirror points
-    if mirror_source:
-        p_mirror = mirror_point(p)
-        r_mirror, s_mirror = borehole.radial_axial_position(p_mirror, r_min=r_min)
-
     # Integration function
     if real_source and mirror_source:
-        def integrand(xi, time, alpha):
-            s_self = borehole.longitudinal_position(xi)
+        def integrand(xi):
+            s_self = (1 + xi) / 2 * L
             dis = np.sqrt(r**2 + (s - s_self)**2)
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
-            psi = basis.basis_function(xi)
-            two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
-            dh = 0.25 * borehole.L * np.multiply.outer(
-                erfc(np.divide.outer(dis, two_sqrt_alpha_time).T) / dis
-                - erfc(np.divide.outer(dis_mirror, two_sqrt_alpha_time).T) / dis_mirror,
+            psi = np.power.outer(xi, np.arange(n))
+            dh = 0.25 * L * np.multiply.outer(
+                erfc(np.multiply.outer(u, dis)) / dis
+                - erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
                 psi
             )
             return dh
     elif real_source:
-        def integrand(xi, time, alpha):
-            s_self = borehole.longitudinal_position(xi)
+        def integrand(xi):
+            s_self = (1 + xi) / 2 * L
             dis = np.sqrt(r**2 + (s - s_self)**2)
-            psi = basis.basis_function(xi)
-            two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
-            dh = 0.25 * borehole.L * np.multiply.outer(
-                erfc(np.divide.outer(dis, two_sqrt_alpha_time).T) / dis,
+            psi = np.power.outer(xi, np.arange(n))
+            dh = 0.25 * L * np.multiply.outer(
+                erfc(np.multiply.outer(u, dis)) / dis,
                 psi
             )
             return dh
     elif mirror_source:
-        def integrand(xi, time, alpha):
-            s_self = borehole.longitudinal_position(xi)
+        def integrand(xi):
+            s_self = (1 + xi) / 2 * L
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
-            psi = basis.basis_function(xi)
-            two_sqrt_alpha_time = 2 * np.sqrt(alpha * time)
-            dh = -0.25 * borehole.L * np.multiply.outer(
-                erfc(np.divide.outer(dis_mirror, two_sqrt_alpha_time).T) / dis_mirror,
+            psi = np.power.outer(xi, np.arange(n))
+            dh = -0.25 * L * np.multiply.outer(
+                erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
                 psi
             )
             return dh
     else:
         # TODO: return zeros of correct shape
-        def integrand(xi, time, alpha):
-            shape = np.shape(time) + tuple(np.ones(np.ndim(p), dtype=int))
+        def integrand(xi):
+            shape = np.shape(u) + np.shape(s) + (n,)
             dh = np.zeros(shape)
             return dh
 
     return integrand
+
+
+def _finite_line_source_integral(
+        u, L, r, s, r_mirror, s_mirror, n, real_source=True, mirror_source=True):
+    if real_source or mirror_source:
+        integrand = _finite_line_source_integrand(
+            u, L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
+        I = quad_vec(integrand, -1, 1)[0]
+    else:
+        # TODO: return zeros of correct shape
+        shape = np.shape(u) + np.shape(s) + (n,)
+        I = np.zeros(shape)
+    return I
 
 
 def _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=None, real_source=True, mirror_source=True):

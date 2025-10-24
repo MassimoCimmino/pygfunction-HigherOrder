@@ -6,6 +6,17 @@ import numpy.typing as npt
 from scipy.special import erf
 
 
+def _first_order_inner_integral(
+        u: npt.ArrayLike,
+        L: npt.ArrayLike,
+        s: npt.ArrayLike):
+    """First order inner integral of the finite line source solution."""
+    term1 = np.exp(-np.multiply.outer(u, (L - s))**2)
+    term2 = np.exp(-np.multiply.outer(u, s)**2)
+    X_1 = (term2 - term1).T / (u**2 * L * np.sqrt(np.pi))
+    return X_1.T
+
+
 def _inner_integral(
         u: npt.ArrayLike,
         L: npt.ArrayLike,
@@ -51,14 +62,3 @@ def _zeroth_order_inner_integral(
     term2 = erf(np.multiply.outer(u, s))
     X_0 = 0.5 / u * (term1 + term2).T
     return X_0.T
-
-
-def _first_order_inner_integral(
-        u: npt.ArrayLike,
-        L: npt.ArrayLike,
-        s: npt.ArrayLike):
-    """First order inner integral of the finite line source solution."""
-    term1 = np.exp(-np.multiply.outer(u, (L - s))**2)
-    term2 = np.exp(-np.multiply.outer(u, s)**2)
-    X_1 = (term2 - term1).T / (u**2 * L * np.sqrt(np.pi))
-    return X_1.T

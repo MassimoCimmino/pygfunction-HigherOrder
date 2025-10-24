@@ -6,8 +6,8 @@ import numpy.typing as npt
 from scipy.integrate import quad_vec
 
 from ._inner_integral import _zeroth_order_inner_integral
-from ..utils.error_function import _error_function_coefficients
-from ..utils import exp1, mirror_point
+from ...utils.error_function import _error_function_coefficients
+from ...utils import exp1, mirror_point
 
 
 def zeroth_order_finite_line_source(
@@ -52,34 +52,6 @@ def _zeroth_order_finite_line_source(u, L, r, s, r_mirror, s_mirror, deg=None, r
     return I_0
 
 
-def __zeroth_order_finite_line_source_integral(u, L, r, s, r_mirror, s_mirror, real_source=True, mirror_source=True):
-    """Zeroth order finite line source solution using numerical integration."""
-    if real_source and mirror_source:
-        def integrand(u):
-            X_0 = _zeroth_order_inner_integral(u, L, s)
-            X_0_mirror = _zeroth_order_inner_integral(u, L, s_mirror)
-            return np.exp(-(u * r)**2) * X_0 - np.exp(-(u * r_mirror)**2) * X_0_mirror
-    elif real_source:
-        def integrand(u):
-            X_0 = _zeroth_order_inner_integral(u, L, s)
-            return np.exp(-(u * r)**2) * X_0
-    elif mirror_source:
-        def integrand(u):
-            X_0_mirror = _zeroth_order_inner_integral(u, L, s_mirror)
-            return -np.exp(-(u * r_mirror)**2) * X_0_mirror
-    else:
-        shape = np.shape(u) + np.shape(s)
-        return np.zeros(shape)
-    # Lower bound of integration
-    a = u
-    # Upper bound of integration
-    b = np.concatenate(([np.inf], a[:-1]))
-    I_0 = np.cumsum(np.stack(
-        [quad_vec(integrand, a_i, b_i, epsabs=1e-4, epsrel=1e-6)[0]
-            for a_i, b_i in zip(a, b)],
-        axis=0), axis=0)
-    return I_0
-
 def __zeroth_order_finite_line_source_approximation(u, L, r, s, r_mirror, s_mirror, deg=11, real_source=True, mirror_source=True):
     """Zeroth order finite line source solution using approximation."""
     _a_erf, _b_erf = _error_function_coefficients(deg)
@@ -108,4 +80,33 @@ def __zeroth_order_finite_line_source_approximation(u, L, r, s, r_mirror, s_mirr
                 )
         ) @ _a_erf
     ) @ q
+    return I_0
+
+
+def __zeroth_order_finite_line_source_integral(u, L, r, s, r_mirror, s_mirror, real_source=True, mirror_source=True):
+    """Zeroth order finite line source solution using numerical integration."""
+    if real_source and mirror_source:
+        def integrand(u):
+            X_0 = _zeroth_order_inner_integral(u, L, s)
+            X_0_mirror = _zeroth_order_inner_integral(u, L, s_mirror)
+            return np.exp(-(u * r)**2) * X_0 - np.exp(-(u * r_mirror)**2) * X_0_mirror
+    elif real_source:
+        def integrand(u):
+            X_0 = _zeroth_order_inner_integral(u, L, s)
+            return np.exp(-(u * r)**2) * X_0
+    elif mirror_source:
+        def integrand(u):
+            X_0_mirror = _zeroth_order_inner_integral(u, L, s_mirror)
+            return -np.exp(-(u * r_mirror)**2) * X_0_mirror
+    else:
+        shape = np.shape(u) + np.shape(s)
+        return np.zeros(shape)
+    # Lower bound of integration
+    a = u
+    # Upper bound of integration
+    b = np.concatenate(([np.inf], a[:-1]))
+    I_0 = np.cumsum(np.stack(
+        [quad_vec(integrand, a_i, b_i, epsabs=1e-4, epsrel=1e-6)[0]
+            for a_i, b_i in zip(a, b)],
+        axis=0), axis=0)
     return I_0
