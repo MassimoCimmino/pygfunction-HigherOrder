@@ -297,10 +297,7 @@ class Borehole(object):
         """
 
         """
-        if p_proj.ndim == 2 and p_top.ndim == 2:
-            dp = p_proj - p_top[:, np.newaxis, ...]
-        else:
-            dp = p_proj - p_top
+        dp = p_proj - p_top
         s = dp @ unit_vector
         return s
 

@@ -11,10 +11,11 @@ def _first_order_inner_integral(
         L: npt.ArrayLike,
         s: npt.ArrayLike):
     """First order inner integral of the finite line source solution."""
-    term1 = np.exp(-np.multiply.outer(u, (L - s))**2)
-    term2 = np.exp(-np.multiply.outer(u, s)**2)
-    X_1 = (term2 - term1).T / (u**2 * L * np.sqrt(np.pi))
-    return X_1.T
+    uu = u * u
+    term1 = np.exp(-np.multiply.outer(uu, (L - s)**2))
+    term2 = np.exp(-np.multiply.outer(uu, s**2))
+    X_1 = (((term2 - term1) / L).T / (uu.T * np.sqrt(np.pi))).T
+    return X_1
 
 
 def _inner_integral(
@@ -45,11 +46,11 @@ def _inner_integral(
 
         LL = L * L
         for k in range(2, n):
-            X[..., k] = (2 * (k - 1) / (LL * uu) * X[..., k - 2].T).T
+            X[..., k] = (2 * (k - 1) * (X[..., k - 2] / LL).T / uu.T).T
             X[..., k] -= ((
-                (2 * (L - s) / L)**(k - 1) * term_L
-                - (-2 * s / L)**(k - 1) * term_0
-            ).T / (np.sqrt(np.pi) * uu * L)).T
+                (2 * (L - s) / L)**(k - 1) * term_L / L
+                - (-2 * s / L)**(k - 1) * term_0 / L
+            ).T / (np.sqrt(np.pi) * uu).T).T
     return X
 
 
@@ -58,7 +59,8 @@ def _zeroth_order_inner_integral(
         L: npt.ArrayLike,
         s: npt.ArrayLike):
     """Zeroth order inner integral of the finite line source solution."""
+    u = np.asarray(u)
     term1 = erf(np.multiply.outer(u, (L - s)))
     term2 = erf(np.multiply.outer(u, s))
-    X_0 = 0.5 / u * (term1 + term2).T
-    return X_0.T
+    X_0 = (0.5 / u.T * (term1 + term2).T).T
+    return X_0

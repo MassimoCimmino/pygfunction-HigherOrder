@@ -76,18 +76,17 @@ def _first_order_integral(
         s: npt.ArrayLike):
     """First order integral."""
     # shape = np.shape(u) + tuple(np.ones(np.ndim(s), dtype=int))
-    if np.ndim(r) == 1 or np.ndim(s) == 1:
-        u = np.expand_dims(u, axis=-1)
     # u_reshaped = np.reshape(u, shape)
     # Integral of exp(-u**2 * r**2) * X_1(u, L, s) du
     arg1 = (L - s)**2 + r**2
     sqrt_arg1 = np.sqrt(arg1)
     arg2 = s**2 + r**2
     sqrt_arg2 = np.sqrt(arg2)
-    term1 = np.exp(-u**2 * arg1) / (u * np.sqrt(np.pi))
-    term2 = np.exp(-u**2 * arg2) / (u * np.sqrt(np.pi))
-    term3 = sqrt_arg1 * erfc(u * sqrt_arg1)
-    term4 = sqrt_arg2 * erfc(u * sqrt_arg2)
+    uu = u * u
+    term1 = (np.exp(-np.multiply.outer(uu, arg1)).T / (u * np.sqrt(np.pi))).T
+    term2 = (np.exp(-np.multiply.outer(uu, arg2)).T / (u * np.sqrt(np.pi))).T
+    term3 = sqrt_arg1 * erfc(np.multiply.outer(u, sqrt_arg1))
+    term4 = sqrt_arg2 * erfc(np.multiply.outer(u, sqrt_arg2))
     J_1 = (term2 - term1 + term3 - term4) / L
 
     return J_1

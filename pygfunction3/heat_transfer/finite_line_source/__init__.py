@@ -15,4 +15,8 @@ from .zeroth_order_finite_line_source import (
     zeroth_order_finite_line_source,
     _zeroth_order_finite_line_source,
 )
-from ._inner_integral import _zeroth_order_inner_integral, _first_order_inner_integral, _inner_integral
+from ._inner_integral import (
+    _first_order_inner_integral,
+    _inner_integral,
+    _zeroth_order_inner_integral
+)

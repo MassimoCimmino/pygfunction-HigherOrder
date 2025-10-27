@@ -83,7 +83,7 @@ def _finite_line_source_integrand(
             dis = np.sqrt(r**2 + (s - s_self)**2)
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
-            dh = 0.25 * L * np.multiply.outer(
+            dh = 0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
                 erfc(np.multiply.outer(u, dis)) / dis
                 - erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
                 psi
@@ -94,7 +94,7 @@ def _finite_line_source_integrand(
             s_self = (1 + xi) / 2 * L
             dis = np.sqrt(r**2 + (s - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
-            dh = 0.25 * L * np.multiply.outer(
+            dh = 0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
                 erfc(np.multiply.outer(u, dis)) / dis,
                 psi
             )
@@ -104,7 +104,7 @@ def _finite_line_source_integrand(
             s_self = (1 + xi) / 2 * L
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
-            dh = -0.25 * L * np.multiply.outer(
+            dh = -0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
                 erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
                 psi
             )
@@ -153,9 +153,10 @@ def _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=None, 
 
 
 def _integral(u, L, r, s, n, deg: int | None = None,):
+    u = np.asarray(u)
     if n == 0:
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
-        J = np.expand_dims(I_0, axis=-1)
+        J = np.expand_dims(J_0, axis=-1)
     elif n == 1:
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
         J_1 = _first_order_integral(u, L, r, s)
@@ -171,7 +172,7 @@ def _integral(u, L, r, s, n, deg: int | None = None,):
         LL = L * L
         rr = r * r
         rr_over_LL = rr / LL
-        exp_coef = (np.divide.outer(2 / u, LL).T * np.exp(np.multiply.outer(-uu, rr)).T).T
+        exp_coef = (2 / u.T * (np.exp(np.multiply.outer(-uu, rr)) / LL).T).T
         X = _inner_integral(u, L, s, n - 2)
         eta_0 = -2 * s / L
         eta_L = 2 * (L - s) / L
