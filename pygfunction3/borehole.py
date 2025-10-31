@@ -180,6 +180,8 @@ class Borehole(object):
             Axial position (in meters) along the borehole.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         s = self._axial_position(p_proj, self.p_top, self.unit_vector)
         return s
@@ -222,6 +224,8 @@ class Borehole(object):
         [ 5.  0. -4.]
 
         """
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         p = self._position(xi, self.L, self.p_middle, self.unit_vector)
         return p
 
@@ -240,6 +244,8 @@ class Borehole(object):
             Projected point(s) (x, y, z) (in meters) onto the borehole axis.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self._projection(p, self.p_middle, self.unit_vector)
         return p_proj
 
@@ -264,6 +270,8 @@ class Borehole(object):
             Axial distance (in meters) along the borehole.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         r = self._radial_position(p_proj, p, r_min=r_min)
         s = self._axial_position(p_proj, self.p_top, self.unit_vector)
@@ -288,6 +296,8 @@ class Borehole(object):
             Radial distance (in meters) from the borehole axis.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         r = self._radial_position(p_proj, p, r_min=r_min)
         return r
@@ -317,8 +327,6 @@ class Borehole(object):
             Longitudinal position (in meters) along the borehole.
 
         """
-        if isinstance(xi, list):
-            xi = np.atleast_1d(xi)
         s = 0.5 * L * (xi + 1.)
         return s
 
@@ -344,8 +352,6 @@ class Borehole(object):
         [5.0, 0.0, -79.0]
 
         """
-        if isinstance(xi, list):
-            xi = np.atleast_1d(xi)
         p = p_middle + 0.5 * L * np.multiply.outer(xi, unit_vector)
         return p
 

@@ -216,6 +216,8 @@ class Borefield(object):
             Axial position (in meters) along the borehole.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         s = self._axial_position(p_proj, self.p_top, self.unit_vector)
         return s
@@ -235,6 +237,8 @@ class Borefield(object):
             Longitudinal position (in meters) along the borehole.
 
         """
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         return self._longitudinal_position(xi, self.L)
 
     def position(self, xi: npt.ArrayLike) -> np.ndarray:
@@ -258,6 +262,8 @@ class Borefield(object):
         [ 5.  0. -4.]
 
         """
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         p = self._position(xi, self.L, self.p_middle, self.unit_vector)
         return p
 
@@ -276,6 +282,8 @@ class Borefield(object):
             Projected point(s) (x, y, z) (in meters) onto the borehole axis.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self._projection(p, self.p_middle, self.unit_vector)
         return p_proj
 
@@ -300,6 +308,8 @@ class Borefield(object):
             Axial distance (in meters) along the borehole.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         r = self._radial_position(p_proj, p, r_min=r_min)
         s = self._axial_position(p_proj, self.p_top, self.unit_vector)
@@ -324,6 +334,8 @@ class Borefield(object):
             Radial distance (in meters) from the borehole axis.
 
         """
+        if isinstance(p, list):
+            p = np.asarray(p)
         p_proj = self.projection(p)
         r = self._radial_position(p_proj, p, r_min=r_min)
         return r
@@ -353,8 +365,6 @@ class Borefield(object):
             Longitudinal position (in meters) along the borehole.
 
         """
-        if isinstance(xi, list):
-            xi = np.atleast_1d(xi)
         s = 0.5 * np.multiply.outer(xi + 1., L)
         return s
 
@@ -380,14 +390,19 @@ class Borefield(object):
         [5.0, 0.0, -79.0]
 
         """
-        if isinstance(xi, list):
-            xi = np.atleast_1d(xi)
-        p = p_middle + 0.5 * L[..., np.newaxis] * np.multiply.outer(xi, unit_vector)
+        dp = np.einsum(
+            'n,...,np->...np',
+            0.5 * L,
+            xi,
+            unit_vector
+        )
+        p = p_middle + dp
         return p
 
     @classmethod
     def _projection(cls, p, p_middle, unit_vector):
-        dp = p[..., np.newaxis, :] - p_middle
+        p = p[..., np.newaxis, :]
+        dp = p - p_middle
         p_proj = p_middle + np.einsum(
             '...np,np,nq->...nq',
             dp, unit_vector, unit_vector
@@ -399,7 +414,8 @@ class Borefield(object):
         """
 
         """
-        dp = p_proj - p[..., np.newaxis, :]
+        p = p[..., np.newaxis, :]
+        dp = p_proj - p
         r = np.linalg.norm(
             dp,
             axis=-1

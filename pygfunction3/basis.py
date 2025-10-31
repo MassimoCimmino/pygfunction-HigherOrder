@@ -58,6 +58,8 @@ class Basis:
             functions.
 
         """
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         return self._basis_function(xi, self._psi_coefs)
 
     @classmethod
@@ -78,5 +80,7 @@ class Basis:
             (`n_nodes`,) array of polynomial basis functions.
 
         """
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         psi = polyval(xi, psi_coefs)
         return psi.T

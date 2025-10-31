@@ -19,6 +19,8 @@ def mirror_point(p: npt.ArrayLike) -> np.ndarray:
         The mirror point(s) with the same shape as the input.
 
     """
+    if isinstance(p, list):
+        p = np.asarray(p)
     p_mirror = p.copy()
     p_mirror[..., -1] = -p[..., -1]
     return p_mirror

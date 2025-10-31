@@ -12,6 +12,8 @@ from scipy.special import erfc, erfcx
 from .first_order_finite_line_source import _first_order_integral
 from .zeroth_order_finite_line_source import _zeroth_order_finite_line_source
 from ._inner_integral import _inner_integral
+from ...borehole import Borehole
+from ...borefield import Borefield
 from ...utils import mirror_point
 
 
@@ -19,7 +21,7 @@ def finite_line_source(
         time: npt.ArrayLike,
         alpha: float,
         p: npt.ArrayLike,
-        borehole,
+        source: Borefield | Borehole,
         n: int,
         r_min: float = 0.,
         method: str = 'recurrence',
@@ -28,50 +30,56 @@ def finite_line_source(
         mirror_source: bool = True
         ) -> np.ndarray:
     """Finite line source solution of order n."""
+    if isinstance(time, list):
+        time = np.asarray(time)
     # Lower bound of integration
     u = 1 / np.sqrt(4 * alpha * time)
+
     # Real points
     if real_source:
-        r, s = borehole.radial_axial_position(p, r_min=r_min)
+        r, s = source.radial_axial_position(p, r_min=r_min)
     else:
         r = np.empty(p.shape[:-1])
         s = np.empty(p.shape[:-1])
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
-        r_mirror, s_mirror = borehole.radial_axial_position(p_mirror, r_min=r_min)
+        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=r_min)
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
+
+    # Reshape inputs for broadcasting
+    shape_u = np.shape(u)
+    shape_s = np.shape(s)
+    u = np.reshape(u, shape_u + (1,) * len(shape_s))
+
     # Finite line source solution
     if method.lower() == 'recurrence':
-        I = _finite_line_source_recurrence(u, borehole.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+        I = _finite_line_source_recurrence(u, source.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
     elif method.lower() == 'integral':
-        I = _finite_line_source_integral(u, borehole.L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
+        I = _finite_line_source_integral(u, source.L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
     else:
         # TODO: return zeros of correct shape
-        shape = np.shape(u) + np.shape(s) + (n,)
+        shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
         I = np.zeros(shape)
     return I
 
 
-def _boundary_integral(u, r, s):
-    arg = s**2 + r**2
+def _boundary_integral(u: np.ndarray, r: np.ndarray, s: np.ndarray) -> np.ndarray:
+    arg = s * s + r * r
     sqrt_arg = np.sqrt(arg)
-    return (
-        np.exp(np.multiply.outer(-u**2, arg)) * (
-            1 / u - (sqrt_arg * np.sqrt(np.pi) * erfcx(np.multiply.outer(u, sqrt_arg))).T).T
-        )
+    return np.exp(-u * u * arg) * (1 / u - (sqrt_arg * np.sqrt(np.pi) * erfcx(u * sqrt_arg)))
 
 
 def _finite_line_source_integrand(
-        u,
-        L,
-        r,
-        s,
-        r_mirror,
-        s_mirror,
-        n,
+        u: np.ndarray,
+        L: float | np.ndarray,
+        r: np.ndarray,
+        s: np.ndarray,
+        r_mirror: np.ndarray,
+        s_mirror: np.ndarray,
+        n: int,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> Callable:
@@ -79,40 +87,40 @@ def _finite_line_source_integrand(
     # Integration function
     if real_source and mirror_source:
         def integrand(xi):
-            s_self = (1 + xi) / 2 * L
+            s_self = np.multiply.outer(L / 2, 1 + xi)
             dis = np.sqrt(r**2 + (s - s_self)**2)
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
             dh = 0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
-                erfc(np.multiply.outer(u, dis)) / dis
-                - erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
+                erfc(u * dis) / dis
+                - erfc(u * dis_mirror) / dis_mirror,
                 psi
             )
             return dh
     elif real_source:
         def integrand(xi):
-            s_self = (1 + xi) / 2 * L
+            s_self = np.multiply.outer(L / 2, 1 + xi)
             dis = np.sqrt(r**2 + (s - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
             dh = 0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
-                erfc(np.multiply.outer(u, dis)) / dis,
+                erfc(u * dis) / dis,
                 psi
             )
             return dh
     elif mirror_source:
         def integrand(xi):
-            s_self = (1 + xi) / 2 * L
+            s_self = np.multiply.outer(L / 2, 1 + xi)
             dis_mirror = np.sqrt(r_mirror**2 + (s_mirror - s_self)**2)
             psi = np.power.outer(xi, np.arange(n))
             dh = -0.25 * np.expand_dims(L, axis=-1) * np.multiply.outer(
-                erfc(np.multiply.outer(u, dis_mirror)) / dis_mirror,
+                erfc(u * dis_mirror) / dis_mirror,
                 psi
             )
             return dh
     else:
         # TODO: return zeros of correct shape
         def integrand(xi):
-            shape = np.shape(u) + np.shape(s) + (n,)
+            shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
             dh = np.zeros(shape)
             return dh
 
@@ -120,25 +128,46 @@ def _finite_line_source_integrand(
 
 
 def _finite_line_source_integral(
-        u, L, r, s, r_mirror, s_mirror, n, real_source=True, mirror_source=True):
+        u: np.ndarray,
+        L: float | np.ndarray,
+        r: np.ndarray,
+        s: np.ndarray,
+        r_mirror: np.ndarray,
+        s_mirror: np.ndarray,
+        n: int,
+        real_source: bool = True,
+        mirror_source: bool = True
+        ) -> np.ndarray:
     if real_source or mirror_source:
         integrand = _finite_line_source_integrand(
             u, L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
         I = quad_vec(integrand, -1, 1)[0]
     else:
         # TODO: return zeros of correct shape
-        shape = np.shape(u) + np.shape(s) + (n,)
+        shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
         I = np.zeros(shape)
     return I
 
 
-def _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=None, real_source=True, mirror_source=True):
+def _finite_line_source_recurrence(
+        u: np.ndarray,
+        L: float | np.ndarray,
+        r: np.ndarray,
+        s: np.ndarray,
+        r_mirror: np.ndarray,
+        s_mirror: np.ndarray,
+        n: int,
+        deg: int | None = None,
+        real_source: bool = True,
+        mirror_source: bool = True
+        ) -> np.ndarray:
     if real_source or mirror_source:
         binom = _pascal(n)
         _n, _k = np.tril_indices(n)
         exponent = np.zeros((n, n), dtype=int)
         exponent[_n, _k] = _n - _k
-    I = np.zeros(np.shape(u) + np.shape(s) + (n,))
+    shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
+    I = np.zeros(shape)
     # Real integrals
     if real_source:
         J_real = _integral(u, L, r, s, n, deg=deg)
@@ -152,8 +181,14 @@ def _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=None, 
     return I
 
 
-def _integral(u, L, r, s, n, deg: int | None = None,):
-    u = np.asarray(u)
+def _integral(
+        u: np.ndarray,
+        L: float | np.ndarray,
+        r: np.ndarray,
+        s: np.ndarray,
+        n: int,
+        deg: int | None = None
+        ) -> np.ndarray:
     if n == 0:
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
         J = np.expand_dims(J_0, axis=-1)
@@ -162,7 +197,8 @@ def _integral(u, L, r, s, n, deg: int | None = None,):
         J_1 = _first_order_integral(u, L, r, s)
         J = np.stack([J_0, J_1], axis=-1)
     else:
-        J = np.empty(np.shape(u) + np.shape(s) + (n,))
+        shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
+        J = np.empty(shape)
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
         J_1 = _first_order_integral(u, L, r, s)
         J[..., 0] = J_0
@@ -172,7 +208,7 @@ def _integral(u, L, r, s, n, deg: int | None = None,):
         LL = L * L
         rr = r * r
         rr_over_LL = rr / LL
-        exp_coef = (2 / u.T * (np.exp(np.multiply.outer(-uu, rr)) / LL).T).T
+        exp_coef = 2 / (u * LL) * np.exp(-uu * rr)
         X = _inner_integral(u, L, s, n - 2)
         eta_0 = -2 * s / L
         eta_L = 2 * (L - s) / L
@@ -187,5 +223,5 @@ def _integral(u, L, r, s, n, deg: int | None = None,):
 
 
 @cache
-def _pascal(n):
+def _pascal(n: int) -> np.ndarray:
     return pascal(n, kind='lower')
