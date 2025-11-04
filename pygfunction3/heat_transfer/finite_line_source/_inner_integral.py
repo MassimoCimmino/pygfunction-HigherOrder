@@ -40,17 +40,18 @@ def _inner_integral(
 
         uu = u * u
         arg_0 = uu * s * s
-        term_0 = np.exp(-arg_0)
+        eta_0 = - 2 * s / L
+        term_0 = np.exp(-arg_0) / (uu * L * np.sqrt(np.pi))
         arg_L = uu * (L - s)**2
-        term_L = np.exp(-arg_L)
+        eta_L = 2 * (L - s) / L
+        term_L = np.exp(-arg_L) / (uu * L * np.sqrt(np.pi))
 
         LL = L * L
+        inv_uu_LL = 1 / (uu * LL)
+        p = np.arange(1, n - 1)
+        X[..., 2:] = np.expand_dims(term_0, axis=-1) * np.power.outer(eta_0, p) - np.expand_dims(term_L, axis=-1) * np.power.outer(eta_L, p)
         for k in range(2, n):
-            X[..., k] = 2 * (k - 1) * X[..., k - 2] / (uu * LL)
-            X[..., k] -= (
-                (2 * (L - s) / L)**(k - 1) * term_L
-                - (-2 * s / L)**(k - 1) * term_0
-            ) / (uu * L * np.sqrt(np.pi))
+            X[..., k] += 2 * (k - 1) * X[..., k - 2] * inv_uu_LL
     return X
 
 
