@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections.abc import Callable
 from functools import cache
+from typing import Tuple
 import warnings
 
 import numpy as np
@@ -23,13 +24,58 @@ def finite_line_source(
         p: npt.ArrayLike,
         source: Borefield | Borehole,
         n: int,
-        r_min: float = 0.,
-        method: str = 'recurrence',
+        r_min: float | None = None,
+        r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
+        backend: str = 'recurrence',
         deg: int | None = None,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
-    """Finite line source solution of order n."""
+    """
+    Finite line source solution up to order n.
+
+    Parameters
+    ----------
+    time : array_like
+        Time(s) at which to evaluate the solution.
+    alpha : float
+        Thermal diffusivity of the ground.
+    p : array_like
+        Target points.
+    source : Borefield or Borehole
+        Source borefield or borehole.
+    n : int
+        Order of the solution.
+    r_min : float or array_like, optional
+        Minimum radial distance for the finite line source solution.
+        If a single float is provided, it is applied to all source boreholes.
+        If an array is provided, it must have the same length as the number of
+        source boreholes and each value is applied to the corresponding borehole.
+        If None, no minimum radius is applied. Default is None.
+    r_min_indices : tuple of array_like or array_like, optional
+        Indices for applying the minimum radial distance. If the source is a Borefield,
+        this can be a tuple of two array_like, where the first array contains
+        the indices of the target points and the second array contains the
+        corresponding indices of the source boreholes. If the source is a Borehole,
+        this can be a single array_like containing the indices of the target points
+        for which the minimum radial distance should be applied. If None, the minimum radial
+        distance is applied to all target-source pairs. Default is None.
+    backend : str, optional
+        Backend for the finite line source solution. Must be either 'recurrence' or 'integral'. Default is 'recurrence'.
+    deg : int or None, optional
+        Degree of the approximation for the zeroth-order finite line source solution.
+        Only used if backend is 'recurrence'. Default is None, which means that no approximation is used.
+    real_source : bool, optional
+        Whether to include the contribution from the real source. Default is True.
+    mirror_source : bool, optional
+        Whether to include the contribution from the mirror source. Default is True.
+
+    Returns
+    -------
+    I : ndarray
+        Finite line source solution up to order n at the target points and times.
+
+    """
     if isinstance(time, list):
         time = np.asarray(time)
     # Lower bound of integration
@@ -37,14 +83,14 @@ def finite_line_source(
 
     # Real points
     if real_source:
-        r, s = source.radial_axial_position(p, r_min=r_min)
+        r, s = source.radial_axial_position(p, r_min=r_min, r_min_indices=r_min_indices)
     else:
         r = np.empty(p.shape[:-1])
         s = np.empty(p.shape[:-1])
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
-        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=r_min)
+        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=None, r_min_indices=None)
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
@@ -55,14 +101,14 @@ def finite_line_source(
     u = np.reshape(u, shape_u + (1,) * len(shape_s))
 
     # Finite line source solution
-    if method.lower() == 'recurrence':
+    if backend.lower() == 'recurrence':
         I = _finite_line_source_recurrence(u, source.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
-    elif method.lower() == 'integral':
+    elif backend.lower() == 'integral':
         I = _finite_line_source_integral(u, source.L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
     else:
-        # TODO: return zeros of correct shape
-        shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
-        I = np.zeros(shape)
+        warnings.warn(f"Invalid backend '{backend}' for finite line source solution. Falling back to recurrence method.")
+        I = _finite_line_source_recurrence(u, source.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+
     return I
 
 

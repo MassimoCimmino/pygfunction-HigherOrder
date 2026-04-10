@@ -23,4 +23,5 @@ def mirror_point(p: npt.ArrayLike) -> np.ndarray:
         p = np.asarray(p)
     p_mirror = p.copy()
     p_mirror[..., -1] = -p[..., -1]
+
     return p_mirror

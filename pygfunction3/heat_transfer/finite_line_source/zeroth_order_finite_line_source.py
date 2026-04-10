@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Tuple
 import warnings
 
 import numpy as np
@@ -17,7 +18,8 @@ def zeroth_order_finite_line_source(
         alpha: float,
         p: npt.ArrayLike,
         source: Borefield | Borehole,
-        r_min: float = 0.,
+        r_min: npt.ArrayLike |float | None = None,
+        r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
         deg: int | None = None,
         real_source: bool = True,
         mirror_source: bool = True
@@ -30,14 +32,14 @@ def zeroth_order_finite_line_source(
 
     # Real points
     if real_source:
-        r, s = source.radial_axial_position(p, r_min=r_min)
+        r, s = source.radial_axial_position(p, r_min=r_min, r_min_indices=r_min_indices)
     else:
         r = np.empty(p.shape[:-1])
         s = np.empty(p.shape[:-1])
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
-        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=r_min)
+        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=None, r_min_indices=None)
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
@@ -47,7 +49,7 @@ def zeroth_order_finite_line_source(
     shape_s = np.shape(s)
     u = np.reshape(u, shape_u + (1,) * len(shape_s))
 
-    I_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror, s_mirror, deg=deg, real_source=real_source, mirror_source=mirror_source)
+    I_0 = _zeroth_order_finite_line_source(u, source.L, r, s, r_mirror, s_mirror, deg=deg, real_source=real_source, mirror_source=mirror_source)
 
     return I_0
 

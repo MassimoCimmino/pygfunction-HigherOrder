@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from functools import cached_property
+from typing import Tuple
 from typing_extensions import Self     # for compatibility with Python <= 3.10
 import warnings
 
@@ -33,17 +34,17 @@ class Borefield(object):
 
     """
     def __init__(self, L, D, r_b, p_head, tilt=0., orientation=0.):
-        arg_names = ("L", "D", "r_b", "tilt", "orientation")
-        args = (L, D, r_b, tilt, orientation)
-        # Check if arguments are broadcastable to a valid common shape
-        b = np.broadcast(*args)
-        self.n_boreholes = b.size
-        # Broadcast all variables to arrays of length `nBoreholes`
-        for name, value in zip(arg_names, args):
-            setattr(self, name, np.broadcast_to(value, self.n_boreholes))
         # Borehole head position (x, y)
         if isinstance(p_head, list):
             p_head = np.atleast_2d(p_head)
+        self.n_boreholes = np.shape(p_head)[0]
+        # Check if arguments are broadcastable to a valid common shape
+        arg_names = ("L", "D", "r_b", "tilt", "orientation")
+        args = (L, D, r_b, tilt, orientation)
+        b = np.broadcast(*args)
+        # Broadcast all variables to arrays of length `nBoreholes`
+        for name, value in zip(arg_names, args):
+            setattr(self, name, np.broadcast_to(value, self.n_boreholes))
         self.p_head = p_head
         # Vertical boreholes default to an orientation of zero
         self.orientation = np.where(
@@ -56,6 +57,24 @@ class Borefield(object):
     #     s = (f'Borehole(H={self.H}, D={self.D}, r_b={self.r_b}, p={self.p},'
     #          f' tilt={self.tilt}, orientation={self.orientation})')
     #     return s
+
+    @cached_property
+    def all_identical(self) -> np.ndarray:
+        """
+        Returns true if all boreholes are identical.
+
+        Returns
+        -------
+        bool
+            True if all boreholes are identical (same L, D and tilt).
+
+        """
+        all_identical = (
+            np.allclose(self.L, self.L[0]) and
+            np.allclose(self.D, self.D[0]) and
+            np.allclose(self.tilt, self.tilt[0])
+        )
+        return all_identical
 
     @cached_property
     def all_tilted(self) -> np.ndarray:
@@ -112,18 +131,12 @@ class Borefield(object):
     @cached_property
     def unit_vector(self) -> np.ndarray:
         """
-        Returns the unit vector along the borehole axis.
+        Unit vectors along the borehole axes.
 
         Returns
         -------
         array
-            Unit vector along the borehole axis.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[0., 0.])
-        >>> b1.unit_vector
-        [ 0.  0. -1.]
+            Unit vectors along the borehole axes.
 
         """
         unit_vector = np.stack(
@@ -139,18 +152,12 @@ class Borefield(object):
     @cached_property
     def p_top(self) -> np.ndarray:
         """
-        Returns the position of the top of the borehole.
+        Position of the top of the boreholes.
 
         Returns
         -------
         array
-            Position (x, y, z) (in meters) of the top of the borehole.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1.p_top
-        [ 5.  0. -4.]
+            Positions (x, y, z) (in meters) of the top of the boreholes.
 
         """
         return self.position(-1.)
@@ -158,18 +165,12 @@ class Borefield(object):
     @cached_property
     def p_middle(self) -> np.ndarray:
         """
-        Returns the position of the middle of the borehole.
+        Position of the middle of the boreholes.
 
         Returns
         -------
         array
-            Position (x, y, z) (in meters) of the middle of the borehole.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1.p_middle
-        [ 5.   0. -79.]
+            Positions (x, y, z) (in meters) of the middle of the boreholes.
 
         """
         p_middle = np.stack(
@@ -185,35 +186,29 @@ class Borefield(object):
     @cached_property
     def p_bottom(self) -> np.ndarray:
         """
-        Returns the position of the bottom of the borehole.
+        Position of the bottom of the boreholes.
 
         Returns
         -------
         array
-            Position (x, y, z) (in meters) of the bottom of the borehole.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1.p_bottom
-        [ 5.  0. -154.]
+            Positions (x, y, z) (in meters) of the bottom of the boreholes.
 
         """
         return self.position(1.)
 
     def axial_position(self, p: npt.ArrayLike) -> np.ndarray:
         """
-        Returns the axial position with regard to the top of the borehole.
+        Axial positions with regard to the top of the boreholes.
 
         Parameters
         ----------
         p : array-like
-            Point(s) (x, y, z) (in meters) for which to compute the axial position.
+            Point(s) (x, y, z) (in meters) for which to compute the axial positions.
 
         Returns
         -------
         s : array
-            Axial position (in meters) along the borehole.
+            Axial positions (in meters) along the boreholes.
 
         """
         if isinstance(p, list):
@@ -224,17 +219,17 @@ class Borefield(object):
 
     def longitudinal_position(self, xi: npt.ArrayLike) -> np.ndarray:
         """
-        Returns the longitudinal position along the borehole.
+        Longitudinal positions along the boreholes.
 
         Parameters
         ----------
         xi : array-like
-            Coordinate or (M,) array of coordinates along the borehole.
+            Coordinate or (M,) array of coordinates along the boreholes.
 
         Returns
         -------
         s : array
-            Longitudinal position (in meters) along the borehole.
+            Longitudinal positions (in meters) along the boreholes.
 
         """
         if isinstance(xi, list):
@@ -243,23 +238,17 @@ class Borefield(object):
 
     def position(self, xi: npt.ArrayLike) -> np.ndarray:
         """
-        Returns the position along the borehole.
+        Positions along the boreholes.
 
         Parameters
         ----------
         xi : array-like
-            Coordinate or (M,) array of coordinates along the borehole
+            Coordinate or (M,) array of coordinates along the boreholes.
 
         Returns
         -------
         p : array
-            Position (x, y, z) (in meters) along the borehole.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1.position(-1.)
-        [ 5.  0. -4.]
+            Positions (x, y, z) (in meters) along the boreholes.
 
         """
         if isinstance(xi, list):
@@ -269,17 +258,17 @@ class Borefield(object):
 
     def projection(self, p: npt.ArrayLike) -> np.ndarray:
         """
-        Returns the projection of a point onto the borehole axis.
+        Projection of a point onto the borehole axes.
 
         Parameters
         ----------
         p : array-like
-            Point(s) (x, y, z) (in meters) to be projected onto the borehole axis.
+            Point(s) (x, y, z) (in meters) to be projected onto the borehole axes.
 
         Returns
         -------
         p_proj : array
-            Projected point(s) (x, y, z) (in meters) onto the borehole axis.
+            Projected point(s) (x, y, z) (in meters) onto the borehole axes.
 
         """
         if isinstance(p, list):
@@ -287,62 +276,85 @@ class Borefield(object):
         p_proj = self._projection(p, self.p_middle, self.unit_vector)
         return p_proj
 
-    def radial_axial_position(self, p: npt.ArrayLike, r_min=None) -> tuple[np.ndarray, np.ndarray]:
+    def radial_axial_position(self, p: npt.ArrayLike, r_min: float | npt.ArrayLike | None = None, r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | None = None) -> tuple[np.ndarray, np.ndarray]:
         """
-        Returns the radial distance from the borehole axis and the axial position.
+        Radial distances from the borehole axes and axial positions along the boreholes.
 
         Parameters
         ----------
         p : array-like
             Point(s) (x, y, z) (in meters) for which to compute the radial distance and axial position.
-        r_min : float or None, optional
+        r_min : float, array-like or None, optional
             Minimum radius (in meters) to avoid singularities. If not None,
             the returned radial distance is ``sqrt(r**2 + r_min**2)``.
+            Default is None.
+        r_min_indices : tuple of array-like or None, optional
+            Tuple of indices specifying the points for which to apply the minimum radius. If not None,
+            the returned radial distance for the specified points is ``sqrt(r**2 + r_min**2)``.
             Default is None.
 
         Returns
         -------
         r : array
-            Radial distance (in meters) from the borehole axis.
+            Radial distances (in meters) from the borehole axes.
         s : array
-            Axial distance (in meters) along the borehole.
+            Axial positions (in meters) along the boreholes.
 
         """
         if isinstance(p, list):
             p = np.asarray(p)
         p_proj = self.projection(p)
-        r = self._radial_position(p_proj, p, r_min=r_min)
+        r = self._radial_position(p_proj, p, r_min=r_min, r_min_indices=r_min_indices)
         s = self._axial_position(p_proj, self.p_top, self.unit_vector)
         return r, s
 
-    def radial_position(self, p: npt.ArrayLike, r_min=None) -> np.ndarray:
+    def radial_position(self, p: npt.ArrayLike, r_min: float | npt.ArrayLike | None = None, r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | None = None) -> np.ndarray:
         """
-        Returns the radial distance from the borehole axis.
+        Radial distances from the borehole axes.
 
         Parameters
         ----------
         p : array-like
             Point(s) (x, y, z) (in meters) for which to compute the radial distance.
-        r_min : float or None, optional
+        r_min : float, array-like or None, optional
             Minimum radius (in meters) to avoid singularities. If not None,
             the returned radial distance is ``sqrt(r**2 + r_min**2)``.
+            Default is None.
+        r_min_indices : tuple of array-like or None, optional
+            Tuple of indices specifying the points for which to apply the minimum radius. If not None,
+            the returned radial distance for the specified points is ``sqrt(r**2 + r_min**2)``.
             Default is None.
 
         Returns
         -------
         r : array
-            Radial distance (in meters) from the borehole axis.
+            Radial distances (in meters) from the borehole axes.
 
         """
         if isinstance(p, list):
             p = np.asarray(p)
         p_proj = self.projection(p)
-        r = self._radial_position(p_proj, p, r_min=r_min)
+        r = self._radial_position(p_proj, p, r_min=r_min, r_min_indices=r_min_indices)
         return r
 
     @classmethod
-    def _axial_position(cls, p_proj, p_top, unit_vector):
+    def _axial_position(cls, p_proj: np.ndarray, p_top: np.ndarray, unit_vector: np.ndarray) -> np.ndarray:
         """
+        Axial positions along the boreholes with respect to the top of the boreholes.
+
+        Parameters
+        ----------
+        p_proj : array
+            Projected point(s) (x, y, z) (in meters) onto the borehole axes.
+        p_top : array
+            Positions (x, y, z) (in meters) of the top of the boreholes.
+        unit_vector : array
+            Unit vectors along the borehole axes.
+
+        Returns
+        -------
+        s : array
+            Axial positions (in meters) along the boreholes with respect to the top of the boreholes.
 
         """
         dp = p_proj - p_top
@@ -350,44 +362,38 @@ class Borefield(object):
         return s
 
     @classmethod
-    def _longitudinal_position(cls, xi, L):
+    def _longitudinal_position(cls, xi: npt.ArrayLike, L: float) -> np.ndarray:
         """
-        Returns the longitudinal position along the borehole.
+        Longitudinal positions along the boreholes.
 
         Parameters
         ----------
         xi : array-like
-            Coordinate or (M,) array of coordinates along the borehole.
+            Coordinate or (M,) array of coordinates along the boreholes.
 
         Returns
         -------
         s : float or array
-            Longitudinal position (in meters) along the borehole.
+            Longitudinal position (in meters) along the boreholes.
 
         """
         s = 0.5 * np.multiply.outer(xi + 1., L)
         return s
 
     @classmethod
-    def _position(cls, xi, L, p_middle, unit_vector):
+    def _position(cls, xi: npt.ArrayLike, L: float, p_middle: np.ndarray, unit_vector: np.ndarray) -> np.ndarray:
         """
-        Returns the position along the borehole.
+        Positions along the boreholes.
 
         Parameters
         ----------
-        xi : float
-            Coordinate along the borehole.
+        xi : float or array
+            Coordinate or (M,) array of coordinates along the boreholes.
 
         Returns
         -------
         p : array
-            Position (x, y, z) (in meters) along the borehole.
-
-        Examples
-        --------
-        >>> b1 = gt.borehole.Borehole(H=150., D=4., r_b=0.075, p=[5., 0.])
-        >>> b1._position(0.)
-        [5.0, 0.0, -79.0]
+            Positions (x, y, z) (in meters) along the boreholes.
 
         """
         dp = np.einsum(
@@ -400,7 +406,25 @@ class Borefield(object):
         return p
 
     @classmethod
-    def _projection(cls, p, p_middle, unit_vector):
+    def _projection(cls, p: np.ndarray, p_middle: np.ndarray, unit_vector: np.ndarray) -> np.ndarray:
+        """
+        Projection of a point onto the borehole axes.
+
+        Parameters
+        ----------
+        p : array
+            Point(s) (x, y, z) (in meters) to be projected onto the borehole axes.
+        p_middle : array
+            Positions (x, y, z) (in meters) of the middle of the boreholes.
+        unit_vector : array
+            Unit vectors along the borehole axes.
+
+        Returns
+        -------
+        p_proj : array
+            Projected point(s) (x, y, z) (in meters) onto the borehole axes.
+
+        """
         p = p[..., np.newaxis, :]
         dp = p - p_middle
         p_proj = p_middle + np.einsum(
@@ -410,8 +434,25 @@ class Borefield(object):
         return p_proj
 
     @classmethod
-    def _radial_position(cls, p_proj, p, r_min=None):
+    def _radial_position(cls, p_proj: np.ndarray, p: np.ndarray, r_min: float | np.ndarray | None = None, r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | None = None) -> np.ndarray:
         """
+        Radial positions from the borehole axes.
+
+        Parameters
+        ----------
+        p_proj : array
+            Projected point(s) (x, y, z) (in meters) onto the borehole axes.
+        p : array
+            Point(s) (x, y, z) (in meters) for which to calculate radial positions.
+        r_min : float | np.ndarray | None
+            Minimum radial distance (in meters).
+        r_min_indices : Tuple[npt.ArrayLike, npt.ArrayLike] | None
+            Indices of the points for which to apply the minimum radial distance.
+
+        Returns
+        -------
+        r : array
+            Radial positions (in meters) from the borehole axes.
 
         """
         p = p[..., np.newaxis, :]
@@ -421,5 +462,10 @@ class Borefield(object):
             axis=-1
         )
         if r_min is not None:
-            r = np.sqrt(r**2 + r_min**2)
+            if r_min_indices is None:
+                r = np.sqrt(r**2 + r_min**2)
+            elif isinstance(r_min, (float, np.floating)):
+                r[r_min_indices[0], ..., r_min_indices[1]] = np.sqrt(r[r_min_indices[0], ..., r_min_indices[1]]**2 + r_min**2)
+            else:
+                r[r_min_indices[0], ..., r_min_indices[1]] = np.sqrt(r[r_min_indices[0], ..., r_min_indices[1]].T**2 + r_min[r_min_indices[1]]**2).T
         return r

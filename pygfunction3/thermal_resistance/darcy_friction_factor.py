@@ -46,7 +46,7 @@ def darcy_friction_factor_laminar_flow(Re: float, *args) -> float:
         Darcy friction factor.
 
     """
-    return 64 / Re
+    return 64. / Re
 
 
 def darcy_friction_factor_turbulent_flow(Re: float, E: float) -> float:
