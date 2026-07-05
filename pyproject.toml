@@ -1,3 +1,50 @@
+[project]
+name = "pygfunction3"
+version = "0.1.dev0"
+description = "A g-function calculator for Python"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "BSD-3-Clause"
+authors = [
+    { name = "Massimo Cimmino", email = "massimo.cimmino@polymtl.ca" },
+]
+keywords = ["Geothermal", "Ground-source", "Ground heat exchangers"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "numpy>=2.3.5",
+    "scipy>=1.16.3",
+    "secondarycoolantprops>=1.3.0",
+    "typing_extensions>=4.15.0",
+]
+
+[project.optional-dependencies]
+# Required only to render the plotting helpers in pygfunction3.plot.
+plot = ["matplotlib>=3.10.6"]
+
+[project.urls]
+Homepage = "https://github.com/MassimoCimmino/pygfunction"
+
+[dependency-groups]
+# Extra packages used by the notebooks in notebooks/.
+notebooks = [
+    "jupyter",
+    "matplotlib>=3.10.6",
+    "pandas>=2.3.3",
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+exclude = ["doc*", "examples*", "tests*"]
