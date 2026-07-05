@@ -34,6 +34,10 @@ Example usage can be found in the [notebooks](https://github.com/MassimoCimmino/
 
 ### Quick start
 
+pygfunction3 uses [uv](https://docs.astral.sh/uv/) to manage dependencies and
+the development environment. Install uv by following the
+[official instructions](https://docs.astral.sh/uv/getting-started/installation/).
+
 **Developers** - To get the latest version of the code, you can [download the
 repository from github](https://github.com/MassimoCimmino/pygfunction3) or clone
 the project in a local directory using git:
@@ -42,25 +46,45 @@ the project in a local directory using git:
 git clone https://github.com/MassimoCimmino/pygfunction3.git
 ```
 
-Install pygfunction3 in development mode (this requires `pip >= 21.1`):
+Create a virtual environment and install pygfunction3 (in editable mode) along
+with its dependencies:
 ```
-pip install --editable .
+uv sync
 ```
 
-Once pygfunction3 is copied to a local directory, you can verify that it is
-working properly by running the [notebooks](notebooks/README.md).
+Plotting helpers in `pygfunction3.plot` require matplotlib, which is an optional
+extra. Install it with:
+```
+uv sync --extra plot
+```
+
+To install the extra packages needed to run the notebooks (which include
+matplotlib), include the `notebooks` dependency group:
+```
+uv sync --group notebooks
+```
+
+Once pygfunction3 is installed, you can verify that it is working properly by
+running the [notebooks](notebooks/README.md). Any command can be run inside the
+managed environment with `uv run`, e.g. `uv run jupyter lab`.
 
 ### Requirements
 
 pygfunction3 was developed using Python 3.14 and is compatible with Python
-versions >= 3.10. In addition, the following packages are needed to run
-pygfunction3 and its examples:
-- matplotlib (>= 3.10.6),
+versions >= 3.12. Dependencies are declared in `pyproject.toml` and pinned in
+`uv.lock`. The core runtime dependencies are:
 - numpy (>= 2.3.5)
-- pandas (>= 2.3.3)
 - scipy (>= 1.16.3)
-- SecondaryCoolantProps (>= 1.3)
+- SecondaryCoolantProps (>= 1.3.0)
 - typing_extensions (>= 4.15.0)
+
+The `plot` optional extra provides:
+- matplotlib (>= 3.10.6)
+
+The `notebooks` dependency group additionally provides:
+- jupyter
+- matplotlib (>= 3.10.6)
+- pandas (>= 2.3.3)
 
 ## License
 
