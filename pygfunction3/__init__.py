@@ -1,6 +1,7 @@
 from .basis import Basis
 from .borehole import Borehole
 from .borefield import Borefield
+from .fluid import Fluid
 from .g_function import g_function
 from .thermal_resistance import Multipole
 from . import heat_transfer
