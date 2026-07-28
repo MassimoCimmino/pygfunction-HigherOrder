@@ -24,7 +24,7 @@ def finite_line_source(
         p: npt.ArrayLike,
         source: Borefield | Borehole,
         n: int,
-        r_min: float | None = None,
+        r_min: npt.ArrayLike |float | None = None,
         r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
         backend: str = 'recurrence',
         deg: int | None = None,
