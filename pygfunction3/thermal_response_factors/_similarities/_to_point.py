@@ -139,7 +139,7 @@ def _to_point(
         mirror_source=mirror_source
     )
     # Thermal response factors for the mirror source
-    h_mirror = I @ basis._psi_coefs
+    h_mirror = I @ basis._coeficients
     # Broadcast the thermal response factors for the mirror source to the full target points and add to the total response factors
     h += h_mirror[..., indices, :].reshape((-1, *p.shape[:-1], source.n_boreholes, basis.n_nodes))
 

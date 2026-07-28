@@ -121,7 +121,7 @@ def _vertical_to_vertical(
     #        source solution instead of evaluating them again in the finite line source solution.
     I = finite_line_source(time, alpha, p, reference_source, basis.n_nodes, r_min=0., backend=fls_backend, deg=deg, real_source=real_source, mirror_source=mirror_source)
     # Evaluate thermal response factors
-    h = I @ basis._psi_coefs
+    h = I @ basis._coefficients
     # Broadcast to the full target and source borefields
     h = h[..., indices, :].reshape((-1, target.n_boreholes, basis.n_nodes, source.n_boreholes, basis.n_nodes))
 

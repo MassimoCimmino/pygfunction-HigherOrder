@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from functools import cached_property, lru_cache
 from typing_extensions import Self     # for compatibility with Python <= 3.10
 import warnings
 
@@ -36,12 +37,23 @@ class Basis:
         # Node coordinates and weights
         self.xi, self.w = roots_legendre(n_nodes)
 
-        # --- Basis functions (psi) ---
-        self._psi_coefs = polyfit(
+    @cached_property
+    def _coefficients(self) -> np.ndarray:
+        """Coefficients of the polynomial basis functions.
+
+        Returns
+        -------
+        array
+            (`n_nodes`, `n_nodes`,) array of polynomial coefficients for the
+            evaluation of the polynomial basis functions.
+
+        """
+        psi_coefs = polyfit(
             self.xi,
             np.eye(self.n_nodes),
             self.n_nodes - 1
             )
+        return psi_coefs
 
     def basis_function(self, xi: npt.ArrayLike) -> np.ndarray:
         """Polynomial basis functions.
@@ -60,7 +72,34 @@ class Basis:
         """
         if isinstance(xi, list):
             xi = np.asarray(xi)
-        return self._basis_function(xi, self._psi_coefs)
+        return self._basis_function(xi, self._coefficients)
+
+    @lru_cache(maxsize=8)
+    def _shifted_coefficients(self, shift: float=-1.) -> np.ndarray:
+        """Coefficients of the shifted polynomial basis functions.
+
+        Parameters
+        ----------
+        shift : float, default: -1
+            Shift of the node coordinates for the evaluation of the shifted
+            polynomial basis functions. The node coordinates are shifted as
+            ``zeta = xi - shift``. Default is -1, which shifts the node
+            coordinates to the interval [0, 2].
+
+        Returns
+        -------
+        array
+            (`n_nodes`, `n_nodes`,) array of polynomial coefficients for the
+            evaluation of the shifted polynomial basis functions.
+
+        """
+        xi_shifted = self.xi - shift
+        psi_coefs_shifted = polyfit(
+            xi_shifted,
+            np.eye(self.n_nodes),
+            self.n_nodes - 1
+            )
+        return psi_coefs_shifted
 
     @classmethod
     def _basis_function(cls, xi: npt.ArrayLike, psi_coefs: np.ndarray) -> np.ndarray:

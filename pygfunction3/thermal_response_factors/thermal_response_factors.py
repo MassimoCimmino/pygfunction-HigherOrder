@@ -64,7 +64,7 @@ def thermal_response_factors_to_point(
 
     """
     I = finite_line_source(time, alpha, p, source, basis.n_nodes, r_min=r_min, r_min_indices=r_min_indices, backend=fls_backend, deg=deg, real_source=real_source, mirror_source=mirror_source)
-    h = I @ basis._psi_coefs
+    h = I @ basis._coefficients
     return h
 
 
@@ -140,7 +140,7 @@ def thermal_response_factors_to_borehole(
         if isinstance(target, Borefield):
             p_target = p_target.swapaxes(0, 1)
         I = finite_line_source(time, alpha, p_target, source, basis.n_nodes, r_min=r_min, r_min_indices=r_min_indices, backend=fls_backend, deg=deg, real_source=real_source, mirror_source=mirror_source)
-        h = I @ basis._psi_coefs
+        h = I @ basis._coefficients
         return h
     else:
         warnings.warn(f"Unknown backend '{backend}' for thermal response factors. Falling back to 'detailed'.")
