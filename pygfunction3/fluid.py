@@ -5,11 +5,7 @@ from typing_extensions import Self
 import numpy as np
 from numpy.typing import ArrayLike
 
-from scp.water import Water
-from scp.ethyl_alcohol import EthylAlcohol
-from scp.ethylene_glycol import EthyleneGlycol
-from scp.methyl_alcohol import MethylAlcohol
-from scp.propylene_glycol import PropyleneGlycol
+from scp import get_fluid
 
 
 class Fluid:
@@ -220,17 +216,17 @@ class Fluid:
         """
         fluid_lower = fluid_name.lower()
         if fluid_lower == 'water':
-            fluid = Water()
+            fluid = get_fluid('water')
         elif x is None:
             raise TypeError(f"Expected float input; got x = {x}")
         elif fluid_lower == 'ethylalcohol' or fluid_lower == 'ethyl_alcohol':
-            fluid = EthylAlcohol(x)
+            fluid = get_fluid('ethyl_alcohol', concentration=x)
         elif fluid_lower == 'ethyleneglycol' or fluid_lower == 'ethylene_glycol':
-            fluid = EthyleneGlycol(x)
+            fluid = get_fluid('ethylene_glycol', concentration=x)
         elif fluid_lower == 'methylalcohol' or fluid_lower == 'methyl_alcohol':
-            fluid = MethylAlcohol(x)
+            fluid = get_fluid('methyl_alcohol', concentration=x)
         elif fluid_lower == 'propyleneglycol' or fluid_lower == 'propylene_glycol':
-            fluid = PropyleneGlycol(x)
+            fluid = get_fluid('propylene_glycol', concentration=x)
         else:
             raise ValueError(
                 f"Fluid {fluid_lower} is not a valid SecondaryCoolantProps fluid."
