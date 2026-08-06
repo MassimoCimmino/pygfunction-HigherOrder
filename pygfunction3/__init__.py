@@ -3,6 +3,7 @@ from .borehole import Borehole
 from .borefield import Borefield
 from .fluid import Fluid
 from .g_function import g_function
+from .network import Network
 from .pipe import (
     MultipleUTubeParallel, MultipleUTubeSeries, SingleUTube
 )

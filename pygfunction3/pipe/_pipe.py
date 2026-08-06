@@ -573,8 +573,8 @@ class _Pipe(ABC):
         Returns
         -------
         a_in : float or array
-            Heat extraction rate coefficient or (``N``) array of heat
-            extraction rate coefficients.
+            Inlet temperature coefficient or (``N``) array of inlet temperature
+            coefficients.
         a_b : array
             (`n_nodes`,) or (``N``, `n_nodes`,) array of borehole wall
             temperature coefficients.
@@ -670,6 +670,7 @@ class _Pipe(ABC):
 
         # Mixing coefficients:
         # T_out = [c_fu] * [T_fu](s=0)
+        # TODO: Can be done by indexing the upward-flowing pipes coefficients instead of matrix multiplication
         c_fu = self._mixing_coefficients
 
         # Final coefficient matrices for outlet temperatures:
@@ -783,7 +784,7 @@ class _Pipe(ABC):
         Returns
         -------
         a_in : array
-            (`n_pipes`,) or (``N``, `n_pipes`,) array of fluid temperature
+            (`n_pipes`,) or (``N``, `n_pipes`,) array of inlet temperature
             coefficients.
         a_b : array
             (`n_pipes`, `n_nodes`,) or (``N``, `n_pipes`, `n_nodes`,) array of
@@ -942,6 +943,9 @@ class _Pipe(ABC):
             zero-state response coefficients.
 
         """
+        # Convert lists to arrays if necessary
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         if backend == 'integral':
             a_f0 = self._zero_input_response_coefficients(
                 borehole, xi, m_flow, T_f=T_f)
@@ -997,6 +1001,9 @@ class _Pipe(ABC):
             zero-state response coefficients.
 
         """
+        # Convert lists to arrays if necessary
+        if isinstance(xi, list):
+            xi = np.asarray(xi)
         def phi_b(_xi: float) -> np.ndarray:
             return self._state_transition_matrix_b(
                 borehole, basis, xi, m_flow, T_f=T_f, xi_0=_xi)
