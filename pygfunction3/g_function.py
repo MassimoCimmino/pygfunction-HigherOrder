@@ -245,7 +245,7 @@ def _solve(
         # on the inlet fluid temperature
         R_field_in = 2 *  np.pi * k_s * (
             borefield.effective_borefield_thermal_resistance(m_flow)
-            + 0.5 * L_tot / (m_flow * borefield.fluid.specific_heat())
+            + 0.5 * L_tot / (np.abs(m_flow) * borefield.fluid.specific_heat())
         )
         _solve_time_step = partial(_solve_time_step_MIFT,
             w_sources=w_sources,

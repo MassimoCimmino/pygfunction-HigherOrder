@@ -112,7 +112,7 @@ class SingleUTube(_SinglePipe):
             resistances (in m-K/W).
 
         """
-        m_flow_pipe = self._mass_flow_fractions * m_flow
+        m_flow_pipe = self.m_flow_pipe(m_flow)
         # Fluid physical properties
         rho_f = self.fluid.density(T_f)
         mu_f = self.fluid.viscosity(T_f)

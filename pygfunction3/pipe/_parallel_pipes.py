@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from functools import cached_property
+from functools import cached_property, cache
 from typing import Tuple
 
 import numpy as np
@@ -47,24 +47,6 @@ class _ParallelPipes(_Pipe):
         return a_f
 
     @cached_property
-    def _direction_coefficients(self) -> np.ndarray:
-        """Direction coefficients of the pipe.
-
-        Coefficients are positive for downward-flowing pipes and negative for
-        upward-flowing pipes.
-
-        Returns
-        -------
-        array
-            (`n_pipes`,) array of direction coefficients.
-
-        """
-        direction = np.concatenate(
-            (np.ones(self.n_pipes_down), -np.ones(self.n_pipes_up))
-            )
-        return direction
-
-    @cached_property
     def _mass_flow_fractions(self) -> np.ndarray:
         """Mass flow rate factor of the pipe.
 
@@ -77,8 +59,36 @@ class _ParallelPipes(_Pipe):
         """
         return np.full(self.n_pipes, 1 / self.n_pipes_down)
 
-    @cached_property
-    def _mixing_coefficients(self) -> np.ndarray:
+    @cache
+    def _direction_coefficients(self, reverse: bool) -> np.ndarray:
+        """Direction coefficients of the pipe.
+
+        Coefficients are positive for downward-flowing pipes and negative for
+        upward-flowing pipes.
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        array
+            (`n_pipes`,) array of direction coefficients.
+
+        """
+        if reverse:
+            direction = np.concatenate(
+                (-np.ones(self.n_pipes_down), np.ones(self.n_pipes_up))
+                )
+        else:
+            direction = np.concatenate(
+                (np.ones(self.n_pipes_down), -np.ones(self.n_pipes_up))
+                )
+        return direction
+
+    @cache
+    def _mixing_coefficients(self, reverse: bool) -> np.ndarray:
         """Mixing coefficients of the pipe.
 
         Returns coefficients for the relation:
@@ -86,6 +96,11 @@ class _ParallelPipes(_Pipe):
             .. math::
 
                 T_{f,out} = \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -96,9 +111,9 @@ class _ParallelPipes(_Pipe):
         a_fu = np.full(self.n_pipes_up, 1.0 / self.n_pipes_up)
         return a_fu
 
-    @cached_property
+    @cache
     def _pipe_configuration_coefficients(
-        self) -> Tuple[np.ndarray, np.ndarray]:
+        self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
         """Configuration coefficients to reconstruct the temperature vector.
 
         Returns coefficients for the relation:
@@ -107,6 +122,11 @@ class _ParallelPipes(_Pipe):
 
                 \\mathbf{T_{f}}(s) = \\mathbf{a_{fd}} \\mathbf{T_{fd}}(s)
                 + \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -117,13 +137,17 @@ class _ParallelPipes(_Pipe):
             (`n_pipes`, `n_pipes_up`,) array of fluid temperature coefficients.
 
         """
-        a_fd = np.eye(self.n_pipes, M=self.n_pipes_down)
-        a_fu = np.eye(self.n_pipes, M=self.n_pipes_up, k=-self.n_pipes_down)
+        if reverse:
+            a_fd = np.flip(np.eye(self.n_pipes, M=self.n_pipes_up, k=-self.n_pipes_down), axis=1)
+            a_fu = np.flip(np.eye(self.n_pipes, M=self.n_pipes_down), axis=1)
+        else:
+            a_fd = np.eye(self.n_pipes, M=self.n_pipes_down)
+            a_fu = np.eye(self.n_pipes, M=self.n_pipes_up, k=-self.n_pipes_down)
         return a_fd, a_fu
 
-    @cached_property
+    @cache
     def _top_continuity_coefficients(
-        self) -> Tuple[np.ndarray, np.ndarray]:
+        self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
         """Continuity condition at the top of the pipe.
 
         Returns coefficients for the relation:
@@ -132,6 +156,11 @@ class _ParallelPipes(_Pipe):
 
                 \\mathbf{T_{fd}}(s=0) = a_{in} T_{f,in}
                 + \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------

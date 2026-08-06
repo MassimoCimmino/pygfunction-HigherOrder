@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from functools import cached_property
+from functools import cached_property, cache
 from typing import Tuple, List
 
 import numpy as np
@@ -55,7 +55,8 @@ class Network(object):
         # Additional attributes
         self.fluid = self.pipe.fluid
         self.n_boreholes = borefield.n_boreholes
-        self.n_circuits = np.count_nonzero(self._borehole_connectivity == -1)
+        self.n_circuits = np.count_nonzero(
+            self._borehole_connectivity(False) == -1)
 
     @cached_property
     def _borehole_circuits(self) -> np.ndarray:
@@ -70,30 +71,15 @@ class Network(object):
         circuits = np.full(self.n_boreholes, -1, dtype=int)
         for i in range(self.n_circuits):
             # Assign index i to the borehole connected to the outlet i
-            outlet = self._network_outlets[i]
+            outlet = self._network_outlets(False)[i]
             circuits[outlet] = i
             # Assign index i to all boreholes connected to the outlet i,
             # following the borehole connectivity
-            c = self._borehole_connectivity[outlet]
+            c = self._borehole_connectivity(False)[outlet]
             while c != -1:
                 circuits[c] = i
-                c = self._borehole_connectivity[c]
+                c = self._borehole_connectivity(False)[c]
         return circuits
-
-    @cached_property
-    def _borehole_connectivity(self) -> np.ndarray:
-        """Returns the borehole connectivity.
-
-        Returns
-        -------
-        borehole_connectivity : array
-            (`n_boreholes`,) array of borehole connectivity.
-
-        """
-        if self.borehole_connectivity is None:
-            return np.full(self.n_boreholes, -1, dtype=int)
-        else:
-            return np.asarray(self.borehole_connectivity, dtype=int)
 
     @cached_property
     def _borehole_mass_flow_fractions(self) -> np.ndarray:
@@ -121,77 +107,6 @@ class Network(object):
             return np.full(self.n_circuits, 1.0 / self.n_circuits)
         else:
             return np.asarray(self.mass_flow_fractions, dtype=float)
-
-    @cached_property
-    def _network_inlets(self) -> np.ndarray:
-        """Returns the indices of the network inlets.
-
-        Returns
-        -------
-        inlets : array
-            Indices of the network inlets.
-
-        """
-        inlets = np.flatnonzero(self._borehole_connectivity == -1)
-        return inlets
-
-    @cached_property
-    def _network_outlets(self) -> np.ndarray:
-        """Returns the indices of the network outlets.
-
-        Returns
-        -------
-        outlets : array
-            Indices of the network outlets.
-
-        """
-        outlets = np.flatnonzero(
-            ~np.isin(np.arange(self.n_boreholes), self._borehole_connectivity))
-        return outlets
-
-    @cached_property
-    def _top_continuity_coefficients(
-            self) -> Tuple[np.ndarray, np.ndarray]:
-        """Continuity condition at the top of the pipe.
-
-        Returns coefficients for the relation:
-
-            .. math::
-
-                \\mathbf{T_{f,b,in}} =
-                \\mathbf{a_{in}} T_{f,n,in}
-                + \\mathbf{a_{out}} \\mathbf{T_{f,b,out}}
-
-        Returns
-        -------
-        a_in : array
-            (`n_boreholes`,) array of inlet temperature coefficients.
-        a_out : array
-            (`n_boreholes`, `n_boreholes`,) array of fluid temperature
-            coefficients.
-
-        """
-        # Initialize the coefficients for the outlet fluid temperatures
-        # of the boreholes:
-        a_out = np.zeros(
-            (self.borefield.n_boreholes, self.borefield.n_boreholes),
-            dtype=int
-            )
-        if self.borehole_connectivity is None:
-            # If the borehole connectivity is None, all boreholes are connected
-            # to the inlet of the network
-            a_in = np.ones(self.borefield.n_boreholes, dtype=int)
-        else:
-            # Boreholes connected to the inlet of the network have a
-            # coefficient of 1 for the inlet temperature
-            a_in = np.zeros(self.borefield.n_boreholes, dtype=int)
-            a_in[np.asarray(self.borehole_connectivity) == -1] = 1
-            # Other boreholes have a coefficient of 1 for the outlet
-            # temperature of the previous borehole
-            for i in range(self.borefield.n_boreholes):
-                if self.borehole_connectivity[i] != -1:
-                    a_out[i, self.borehole_connectivity[i]] = 1
-        return a_in, a_out
 
     @cached_property
     def _unique_borehole_mass_flow_pairs(
@@ -232,6 +147,121 @@ class Network(object):
         unique_indices = inverse.astype(int, copy=False)
 
         return unique_boreholes, unique_mass_flow_fractions, unique_indices
+
+    @cache
+    def _borehole_connectivity(self, reverse: bool) -> np.ndarray:
+        """Returns the borehole connectivity.
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        borehole_connectivity : array
+            (`n_boreholes`,) array of borehole connectivity.
+
+        """
+        if self.borehole_connectivity is None:
+            return np.full(self.n_boreholes, -1, dtype=int)
+        else:
+            if reverse:
+                # Reverse the borehole connectivity
+                reverse_connectivity = np.full(self.n_boreholes, -1, dtype=int)
+                for i in range(self.n_boreholes):
+                    c = self.borehole_connectivity[i]
+                    if c != -1:
+                        reverse_connectivity[c] = i
+                return reverse_connectivity
+            else:
+                return np.asarray(self.borehole_connectivity, dtype=int)
+
+    @cache
+    def _network_inlets(self, reverse: bool) -> np.ndarray:
+        """Returns the indices of the network inlets.
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        inlets : array
+            Indices of the network inlets.
+
+        """
+        inlets = np.flatnonzero(
+            self._borehole_connectivity(reverse) == -1)
+        return inlets
+
+    @cache
+    def _network_outlets(self, reverse: bool) -> np.ndarray:
+        """Returns the indices of the network outlets.
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        outlets : array
+            Indices of the network outlets.
+
+        """
+        outlets = np.flatnonzero(
+            ~np.isin(
+                np.arange(self.n_boreholes),
+                self._borehole_connectivity(reverse)
+                ))
+        return outlets
+
+    @cache
+    def _top_continuity_coefficients(
+            self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
+        """Continuity condition at the top of the pipe.
+
+        Returns coefficients for the relation:
+
+            .. math::
+
+                \\mathbf{T_{f,b,in}} =
+                \\mathbf{a_{in}} T_{f,n,in}
+                + \\mathbf{a_{out}} \\mathbf{T_{f,b,out}}
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        a_in : array
+            (`n_boreholes`,) array of inlet temperature coefficients.
+        a_out : array
+            (`n_boreholes`, `n_boreholes`,) array of fluid temperature
+            coefficients.
+
+        """
+        # Initialize coefficients
+        a_in = np.zeros(self.borefield.n_boreholes, dtype=int)
+        a_out = np.zeros(
+            (self.borefield.n_boreholes, self.borefield.n_boreholes),
+            dtype=int
+            )
+
+        borehole_connectivity = self._borehole_connectivity(reverse)
+        # Boreholes connected to the inlet of the network have a coefficient
+        # of 1 for the inlet temperature
+        a_in[np.asarray(borehole_connectivity) == -1] = 1
+        # Other boreholes have a coefficient of 1 for the outlet temperature
+        # of the previous borehole
+        for i in range(self.borefield.n_boreholes):
+            if borehole_connectivity[i] != -1:
+                a_out[i, borehole_connectivity[i]] = 1
+        return a_in, a_out
 
     def average_heat_extraction_rate(
             self, basis: Basis, m_flow: float, T_f_in: float, T_b: ArrayLike,
@@ -790,7 +820,7 @@ class Network(object):
         """
         # Coefficient matrices for borehole inlet temperatures:
         # [T_{f,b,in}] = [b_in] * T_{f,n,in} + [b_out] * [T_{f,b,out}]
-        b_in, b_out = self._top_continuity_coefficients
+        b_in, b_out = self._top_continuity_coefficients(m_flow < 0.)
 
         # Coefficient matrices for borehole outlet temperatures:
         # [T_{f,b,out}] = [c_{b,in}] * [T_{f,b,in}] + [c_b] * [T_{b}]
@@ -849,8 +879,9 @@ class Network(object):
 
         # Final coefficient matrices for network outlet temperature:
         # T_{f,n,out} = a_in * T_{f,n,in} + [a_b] * [T_b]
-        a_in = self._mass_flow_fractions @ (b_in[self._network_outlets])
-        a_b =  (b_b[self._network_outlets].T @ self._mass_flow_fractions).T
+        network_outlets = self._network_outlets(m_flow < 0.)
+        a_in = self._mass_flow_fractions @ (b_in[network_outlets])
+        a_b =  (b_b[network_outlets].T @ self._mass_flow_fractions).T
         return a_in, a_b
 
     def _network_total_heat_extraction_rate_coefficients(
@@ -893,8 +924,8 @@ class Network(object):
 
         # Final coefficient matrices for total heat extraction rate:
         # Q = a_in * T_{f,n,in} + [a_b] * [T_b]
-        a_in = m_flow * cp_f * (b_in - 1)
-        a_b = m_flow * cp_f * b_b
+        a_in = np.abs(m_flow) * cp_f * (b_in - 1)
+        a_b = np.abs(m_flow) * cp_f * b_b
         return a_in, a_b
 
     def _outlet_temperature_coefficients(
@@ -930,7 +961,7 @@ class Network(object):
         """
         # Coefficient matrices for borehole inlet temperatures:
         # [T_{f,b,in}] = [b_in] * T_{f,n,in} + [b_out] * [T_{f,b,out}]
-        b_in, b_out = self._top_continuity_coefficients
+        b_in, b_out = self._top_continuity_coefficients(m_flow < 0.)
 
         # Coefficient matrices for borehole outlet temperatures:
         # [T_{f,b,out}] = [c_{b,in}] * [T_{f,b,in}] + [c_b] * [T_{b}]
@@ -1061,6 +1092,6 @@ class Network(object):
         # Final coefficient matrices for total heat extraction rate:
         # [Q_b] = [a_in] * T_{f,n,in} + [a_b] * [T_b]
         mass_flow_fractions = self._borehole_mass_flow_fractions
-        a_in = m_flow * mass_flow_fractions * cp_f * (b_in - 1)
-        a_b = (m_flow * mass_flow_fractions * cp_f * b_b.T).T
+        a_in = np.abs(m_flow) * mass_flow_fractions * cp_f * (b_in - 1)
+        a_b = (np.abs(m_flow) * mass_flow_fractions * cp_f * b_b.T).T
         return a_in, a_b

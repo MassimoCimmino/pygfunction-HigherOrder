@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
-from functools import cached_property, lru_cache
+from functools import cached_property, lru_cache, cache
 from typing import Tuple
 
 import numpy as np
@@ -72,22 +72,6 @@ class _Pipe(ABC):
 
     @cached_property
     @abstractmethod
-    def _direction_coefficients(self) -> np.ndarray:
-        """Direction coefficients of the pipe.
-
-        Coefficients are positive for downward-flowing pipes and negative for
-        upward-flowing pipes.
-
-        Returns
-        -------
-        array
-            (`n_pipes`,) array of direction coefficients.
-
-        """
-        ...
-
-    @cached_property
-    @abstractmethod
     def _mass_flow_fractions(self) -> np.ndarray:
         """Mass flow rate factor of the pipe.
 
@@ -100,9 +84,30 @@ class _Pipe(ABC):
         """
         ...
 
-    @cached_property
+    @cache
     @abstractmethod
-    def _mixing_coefficients(self) -> np.ndarray:
+    def _direction_coefficients(self, reverse: bool) -> np.ndarray:
+        """Direction coefficients of the pipe.
+
+        Coefficients are positive for downward-flowing pipes and negative for
+        upward-flowing pipes.
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
+
+        Returns
+        -------
+        array
+            (`n_pipes`,) array of direction coefficients.
+
+        """
+        ...
+
+    @cache
+    @abstractmethod
+    def _mixing_coefficients(self, reverse: bool) -> np.ndarray:
         """Mixing coefficients of the pipe.
 
         Returns coefficients for the relation:
@@ -110,6 +115,11 @@ class _Pipe(ABC):
             .. math::
 
                 T_{f,out} = \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -119,10 +129,10 @@ class _Pipe(ABC):
         """
         ...
 
-    @cached_property
+    @cache
     @abstractmethod
     def _pipe_configuration_coefficients(
-        self) -> Tuple[np.ndarray, np.ndarray]:
+        self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
         """Configuration coefficients to reconstruct the temperature vector.
 
         Returns coefficients for the relation:
@@ -131,6 +141,11 @@ class _Pipe(ABC):
 
                 \\mathbf{T_{f}}(s) = \\mathbf{a_{fd}} \\mathbf{T_{fd}}(s)
                 + \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -143,10 +158,10 @@ class _Pipe(ABC):
         """
         ...
 
-    @cached_property
+    @cache
     @abstractmethod
     def _top_continuity_coefficients(
-        self) -> Tuple[np.ndarray, np.ndarray]:
+        self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
         """Continuity condition at the top of the pipe.
 
         Returns coefficients for the relation:
@@ -155,6 +170,11 @@ class _Pipe(ABC):
 
                 \\mathbf{T_{fd}}(s=0) = a_{in} T_{f,in}
                 + \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -377,7 +397,7 @@ class _Pipe(ABC):
             (`n_pipes`,) array of mass flow rates in each pipe (in kg/s).
 
         """
-        return m_flow * self._mass_flow_fractions
+        return np.abs(m_flow) * self._mass_flow_fractions
 
     def temperature(
             self, borehole: Borehole, basis: Basis, xi: float | ArrayLike,
@@ -539,8 +559,8 @@ class _Pipe(ABC):
 
         # Final coefficient matrices for total heat extraction rates:
         # Q = a_in * T_{f,in} + [a_b] * [T_b]
-        a_in = m_flow * cp_f * (b_in - 1)
-        a_b = m_flow * cp_f * b_b
+        a_in = np.abs(m_flow) * cp_f * (b_in - 1)
+        a_b = np.abs(m_flow) * cp_f * b_b
         return a_in, a_b
 
     def _heat_extraction_rate_coefficients(
@@ -630,7 +650,7 @@ class _Pipe(ABC):
         diag_indices = np.diag_indices_from(A)
         A[diag_indices] = -np.sum(A, axis=-1)
         # Multiply by direction coefficients
-        c = self._direction_coefficients
+        c = self._direction_coefficients(m_flow < 0.)
         A = A * c[:, None]
         # Divide by heat capacity rate of the fluid
         c_p = self.fluid.specific_heat(T_f)
@@ -671,7 +691,7 @@ class _Pipe(ABC):
         # Mixing coefficients:
         # T_out = [c_fu] * [T_fu](s=0)
         # TODO: Can be done by indexing the upward-flowing pipes coefficients instead of matrix multiplication
-        c_fu = self._mixing_coefficients
+        c_fu = self._mixing_coefficients(m_flow < 0.)
 
         # Final coefficient matrices for outlet temperatures:
         # T_{f,out} = a_in * T_{f,in} + [a_b] * [T_b]
@@ -798,11 +818,11 @@ class _Pipe(ABC):
 
         # Continuity condition (top of the pipe):
         # [T_fd](s=0) = [c_in] * T_{f,in} + [c_fu] * [T_fu](s=0)
-        c_in, c_fu = self._top_continuity_coefficients
+        c_in, c_fu = self._top_continuity_coefficients(m_flow < 0.)
 
         # Pipe configuration:
         # [T_f](s) = [d_fd] * [T_fd](s) + [d_fu] * [T_fu](s)
-        d_fd, d_fu = self._pipe_configuration_coefficients
+        d_fd, d_fu = self._pipe_configuration_coefficients(m_flow < 0.)
 
         # General solution for temperatures:
         # [T_f](s) = [e_f0]*[T_f](s=0) + [e_b] * [T_b]
@@ -855,15 +875,15 @@ class _Pipe(ABC):
 
         # Continuity conditions (top of the pipe):
         # [T_fd](s=0) = [c_in]*[T_in] + [c_fu]*[T_fu](s=0)
+        c_in, c_fu = self._top_continuity_coefficients(m_flow < 0.)
 
-        c_in, c_fu = self._top_continuity_coefficients
         # Continuity conditions (bottom of the pipe):
         # [0]_u = [d_f]*[T_f](s=H)
         d_f = self._bottom_continuity_coefficients
 
         # Pipe configuration:
         # [T_f](s) = [f_fd] * [T_fd](s) + [f_fu] * [T_fu](s)
-        e_fd, e_fu = self._pipe_configuration_coefficients
+        e_fd, e_fu = self._pipe_configuration_coefficients(m_flow < 0.)
 
         # Upward temperatures at s=0:
         # [T_fu](s=0) = [a_in] * T_{f,in} + [a_b] * [T_b]

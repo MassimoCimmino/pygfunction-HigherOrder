@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from functools import cached_property
+from functools import cached_property, cache
 from typing import Tuple
 
 import numpy as np
@@ -36,8 +36,8 @@ class _SeriesPipes(_ParallelPipes):
         """
         return np.ones(self.n_pipes)
 
-    @cached_property
-    def _mixing_coefficients(self) -> np.ndarray:
+    @cache
+    def _mixing_coefficients(self, reverse: bool) -> np.ndarray:
         """Mixing coefficients of the pipe.
 
         Returns coefficients for the relation:
@@ -45,6 +45,11 @@ class _SeriesPipes(_ParallelPipes):
             .. math::
 
                 T_{f,out} = \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
@@ -55,9 +60,9 @@ class _SeriesPipes(_ParallelPipes):
         a_fu = np.concatenate((np.zeros(self.n_pipes_up - 1), np.ones(1)))
         return a_fu
 
-    @cached_property
+    @cache
     def _top_continuity_coefficients(
-        self) -> Tuple[np.ndarray, np.ndarray]:
+        self, reverse: bool) -> Tuple[np.ndarray, np.ndarray]:
         """Continuity condition at the top of the pipe.
 
         Returns coefficients for the relation:
@@ -66,6 +71,11 @@ class _SeriesPipes(_ParallelPipes):
 
                 \\mathbf{T_{fd}}(s=0) = a_{in} T_{f,in}
                 + \\mathbf{a_{fu}} \\mathbf{T_{fu}}(s=0)
+
+        Parameters
+        ----------
+        reverse : bool
+            If True, the flow direction is reversed.
 
         Returns
         -------
