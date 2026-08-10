@@ -217,65 +217,201 @@ def _solve(
     w_sources = np.multiply.outer(L / 2, basis.w).flatten()
     L_tot = np.sum(L)   # Total length of the borefield
 
-    # Return early if boundary condition is UHTR, since it does not require
-    # solving a system of equations
+    # Solve for the g-function based on the boundary condition
     if boundary_condition == 'UHTR':
-        T_b = h_to_self.sum(axis=-1)
-        q_b = np.ones_like(T_b)
-        g_function = T_b @ w_sources / L_tot
-
-    # Partial function for solving a single time step
-    if boundary_condition == 'UBWT':
-        _solve_time_step = partial(
-            _solve_time_step_UBWT,
-            w_sources=w_sources,
-            L_tot=L_tot
-        )
+        g_function, q_b, T_b = _solve_UHTR(h_to_self, w_sources, L_tot)
+    elif boundary_condition == 'UBWT':
+        g_function, q_b, T_b = _solve_UBWT(time, h_to_self, w_sources, L_tot)
     elif boundary_condition == 'MIFT':
-        # Dimensionless heat extraction rate coefficients of the boreholes
-        heat_extraction_rate_coefficients = (
-            borefield._heat_extraction_rate_coefficients(
-                basis, basis.xi, m_flow)
-        )
-        heat_extraction_rate_coefficients = (
-            heat_extraction_rate_coefficients[0] / (2 * np.pi * k_s),
-            heat_extraction_rate_coefficients[1] / (2 * np.pi * k_s)
-        )
-        # Dimensionless effective thermal resistance of the borefield based
-        # on the inlet fluid temperature
-        R_field_in = 2 *  np.pi * k_s * (
-            borefield.effective_borefield_thermal_resistance(m_flow)
-            + 0.5 * L_tot / (np.abs(m_flow) * borefield.fluid.specific_heat())
-        )
-        _solve_time_step = partial(_solve_time_step_MIFT,
-            w_sources=w_sources,
-            L_tot=L_tot,
-            R_field_in=R_field_in,
-            heat_extraction_rate_coefficients=heat_extraction_rate_coefficients
-        )
+        g_function, q_b, T_b = _solve_MIFT(
+            time, h_to_self, borefield, k_s, basis, m_flow, w_sources, L_tot)
+
+    # Reshape q_b and T_b to (n_times, n_boreholes, n_nodes)
+    q_b = q_b.reshape(n_times, n_boreholes, -1)
+    T_b = T_b.reshape(n_times, n_boreholes, -1)
+    return g_function, q_b, T_b
+
+
+def _solve_MIFT(
+        time: np.ndarray, h_to_self: np.ndarray, borefield: Network,
+        k_s: float, basis: Basis, m_flow: float, w_sources: np.ndarray,
+        L_tot: float ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Solve for the g-function under the MIFT boundary condition.
+
+    Parameters
+    ----------
+    time : array
+        Time steps at which to evaluate the g-function.
+    h_to_self : array
+        Thermal response factors of the borefield.
+    borefield : Network
+        Borefield for which to calculate the g-function.
+    k_s : float
+        Thermal conductivity of the ground (in W/m.K).
+    basis : Basis
+        Basis for the thermal response factors.
+    m_flow : float
+        Total fluid mass flow rate through the borefield (in kg/s).
+    w_sources : array
+        Weight array for the borefield.
+    L_tot : float
+        Total length of the borefield.
+
+    Returns
+    -------
+    g_function : array
+        g-Function values.
+    q_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of heat extraction rates.
+    T_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of boehole wall
+        temperatures.
+
+    """
+    n_times = len(time)             # Number of time steps
+    n_sources = h_to_self.shape[-1] # Number of nodes in the borefield
+
+    # Dimensionless heat extraction rate coefficients of the boreholes
+    heat_extraction_rate_coefficients = (
+        borefield._heat_extraction_rate_coefficients(
+            basis, basis.xi, m_flow)
+    )
+    heat_extraction_rate_coefficients = (
+        heat_extraction_rate_coefficients[0] / (2 * np.pi * k_s),
+        heat_extraction_rate_coefficients[1] / (2 * np.pi * k_s)
+    )
+    # Dimensionless effective thermal resistance of the borefield based
+    # on the inlet fluid temperature
+    R_field_in = 2 *  np.pi * k_s * (
+        borefield.effective_borefield_thermal_resistance(m_flow)
+        + 0.5 * L_tot / (np.abs(m_flow) * borefield.fluid.specific_heat())
+    )
 
     # Build interpolant for TRFs
     dt = np.diff(time, prepend=0.)
     h_to_self_dt = make_interp_spline(
         np.concatenate((np.zeros(1), time)),
         np.concatenate(
-            (np.zeros((1, n_sources, h_to_self.shape[-1])), h_to_self),
+            (
+                np.zeros((1, h_to_self.shape[-2], h_to_self.shape[-1])),
+                h_to_self),
             axis=0
             ),
         bc_type='not-a-knot',
         k=1,
         )(dt)
 
-    # Solve for the g-function
-    load_history = LoadHistoryReconstruction(
-        time, h_to_self, h_to_point=h_to_point)
-    for k in range(n_times):
-        g_function[k], q_b[k], T_b[k] = _solve_time_step(
-            load_history, h_to_self_dt[k])
+    # Initialize arrays for results
+    g_function = np.empty(n_times)
+    q_b = np.zeros((n_times, n_sources))
+    T_b = np.zeros((n_times, n_sources))
 
-    # Reshape q_b and T_b to (n_times, n_boreholes, n_nodes)
-    q_b = q_b.reshape(n_times, n_boreholes, -1)
-    T_b = T_b.reshape(n_times, n_boreholes, -1)
+    # Solve for the g-function
+    load_history = LoadHistoryReconstruction(time, h_to_self)
+    for k in range(n_times):
+        g_function[k], q_b[k], T_b[k] = _solve_time_step_MIFT(
+            load_history, h_to_self_dt[k], w_sources, L_tot,
+            R_field_in, heat_extraction_rate_coefficients)
+
+    return g_function, q_b, T_b
+
+
+def _solve_UBWT(
+        time: np.ndarray,
+        h_to_self: np.ndarray,
+        w_sources: np.ndarray,
+        L_tot: float
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Solve for the g-function under the UBWT boundary condition.
+
+    Parameters
+    ----------
+    time : array
+        Time steps at which to evaluate the g-function.
+    h_to_self : array
+        Thermal response factors of the borefield.
+    w_sources : array
+        Weight array for the borefield.
+    L_tot : float
+        Total length of the borefield.
+
+    Returns
+    -------
+    g_function : array
+        g-Function values.
+    q_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of heat extraction rates.
+    T_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of boehole wall
+        temperatures.
+
+    """
+    n_times = len(time)             # Number of time steps
+    n_sources = h_to_self.shape[-1] # Number of nodes in the borefield
+
+    # Build interpolant for TRFs
+    dt = np.diff(time, prepend=0.)
+    h_to_self_dt = make_interp_spline(
+        np.concatenate((np.zeros(1), time)),
+        np.concatenate(
+            (
+                np.zeros((1, h_to_self.shape[-2], h_to_self.shape[-1])),
+                h_to_self),
+            axis=0
+            ),
+        bc_type='not-a-knot',
+        k=1,
+        )(dt)
+
+    # Initialize arrays for results
+    g_function = np.empty(n_times)
+    q_b = np.zeros((n_times, n_sources))
+    T_b = np.zeros((n_times, n_sources))
+
+    # Solve for the g-function
+    load_history = LoadHistoryReconstruction(time, h_to_self)
+    for k in range(n_times):
+        g_function[k], q_b[k], T_b[k] = _solve_time_step_UBWT(
+            load_history, h_to_self_dt[k], w_sources, L_tot)
+
+    return g_function, q_b, T_b
+
+
+def _solve_UHTR(
+        h_to_self: np.ndarray,
+        w_sources: np.ndarray,
+        L_tot: float
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Solve for the g-function under the UHTR boundary condition.
+
+    Parameters
+    ----------
+    h_to_self : array
+        Thermal response factors of the borefield.
+    w_sources : array
+        Weight array for the borefield.
+    L_tot : float
+        Total length of the borefield.
+
+    Returns
+    -------
+    g_function : array
+        g-Function values.
+    q_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of heat extraction rates.
+    T_b : array
+        (`n_times`,`n_boreholes`, `n_nodes`,) array of boehole wall
+        temperatures.
+
+    """
+    # Compute the g-function under the UHTR boundary condition
+    T_b = h_to_self.sum(axis=-1)
+    q_b = np.ones_like(T_b)
+    g_function = T_b @ w_sources / L_tot
+
     return g_function, q_b, T_b
 
 
@@ -286,7 +422,7 @@ def _solve_time_step_MIFT(
         L_tot: float,
         R_field_in: float,
         heat_extraction_rate_coefficients: Tuple[np.ndarray, np.ndarray]
-        ):
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Solve for the g-function at a single time step.
 
@@ -309,7 +445,7 @@ def _solve_time_step_MIFT(
     Returns
     -------
     g_function : float
-        G-function value at the current time step.
+        g-Function value at the current time step.
     q_b : array
         Borehole load at the current time step.
     T_b : float
@@ -357,7 +493,7 @@ def _solve_time_step_UBWT(
         h_to_self_dt: np.ndarray,
         w_sources: np.ndarray,
         L_tot: float
-        ):
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Solve for the g-function at a single time step.
 
@@ -375,7 +511,7 @@ def _solve_time_step_UBWT(
     Returns
     -------
     g_function : float
-        G-function value at the current time step.
+        g-Function value at the current time step.
     q_b : array
         Borehole load at the current time step.
     T_b : float
