@@ -23,7 +23,7 @@ def g_function(
         alpha: float,
         k_s: float,
         basis: Basis,
-        m_flow: float | None = None,
+        m_flow: float | npt.ArrayLike | None = None,
         boundary_condition: str | None = None,
         fls_backend: str = 'recurrence',
         trf_backend: str = 'similarities',
@@ -47,9 +47,10 @@ def g_function(
         Thermal conductivity of the ground.
     basis : Basis
         Basis for the thermal response factors.
-    m_flow : float, optional
+    m_flow : float or array-like, optional
         Total fluid mass flow rate through the borefield. Only used for the
-        'MIFT' boundary condition. Default is None.
+        'MIFT' boundary condition. If an array, the variable fluid mass flow
+        rate g-functions are returned. Default is None.
     boundary_condition : str, optional
         Boundary condition to use for the g-function calculation.
         Options are 'UBWT' (uniform borehole wall temperature) and 'UHTR'
@@ -77,6 +78,8 @@ def g_function(
 
     """
     # Convert lists to arrays if necessary
+    if isinstance(m_flow, list):
+        m_flow = np.asarray(m_flow)
     if isinstance(time, list):
         time = np.asarray(time)
     n_times = len(time)                     # Number of time steps
@@ -156,7 +159,7 @@ def _solve(
         k_s: float | None,
         basis: Basis,
         h_to_self: np.ndarray,
-        m_flow: float | None = None,
+        m_flow: float | np.ndarray | None = None,
         h_to_point: np.ndarray | None = None,
         boundary_condition: str = 'UBWT'
         ):
@@ -176,9 +179,10 @@ def _solve(
         Basis for the thermal response factors.
     h_to_self : array
         Thermal response factors to the borehole.
-    m_flow : float, optional
+    m_flow : float or array, optional
         Total fluid mass flow rate through the borefield. Only used for the
-        'MIFT' boundary condition. Default is None.
+        'MIFT' boundary condition. If an array, the variable fluid mass flow
+        rate g-functions are returned. Default is None.
     h_to_point : array, optional
         Thermal response factors to points. If None, only thermal response
         factors to borehole will be evaluated. Default is None.
@@ -202,12 +206,6 @@ def _solve(
     n_times = len(time)                     # Number of time steps
     n_boreholes = borefield.n_boreholes     # Number of boreholes
     n_nodes = basis.n_nodes                 # Number of nodes per borehole
-    n_sources = n_boreholes * n_nodes       # Number of nodes in the borefield
-
-    # Initialize arrays for results
-    g_function = np.empty(n_times)
-    q_b = np.zeros((n_times, n_sources))
-    T_b = np.zeros((n_times, n_sources))
 
     # Build weight array for the borefield
     if isinstance(borefield, Network):
@@ -216,6 +214,8 @@ def _solve(
         L = borefield.L
     w_sources = np.multiply.outer(L / 2, basis.w).flatten()
     L_tot = np.sum(L)   # Total length of the borefield
+    g_function_shape = (n_times,)
+    profile_shape = (n_times, n_boreholes, n_nodes)
 
     # Solve for the g-function based on the boundary condition
     if boundary_condition == 'UHTR':
@@ -225,17 +225,24 @@ def _solve(
     elif boundary_condition == 'MIFT':
         g_function, q_b, T_b = _solve_MIFT(
             time, h_to_self, borefield, k_s, basis, m_flow, w_sources, L_tot)
+        # Determine output shapes for variable mass flow rate g-functions
+        if isinstance(m_flow, np.ndarray):
+            n_m_flow = len(m_flow)
+            g_function_shape = (n_times, n_m_flow, n_m_flow,)
+            profile_shape = (n_times, n_m_flow, n_boreholes, n_nodes)
 
-    # Reshape q_b and T_b to (n_times, n_boreholes, n_nodes)
-    q_b = q_b.reshape(n_times, n_boreholes, -1)
-    T_b = T_b.reshape(n_times, n_boreholes, -1)
+    # Reshape g_function, q_b, and T_b
+    g_function = g_function.reshape(g_function_shape)
+    q_b = q_b.reshape(profile_shape)
+    T_b = T_b.reshape(profile_shape)
     return g_function, q_b, T_b
 
 
 def _solve_MIFT(
         time: np.ndarray, h_to_self: np.ndarray, borefield: Network,
-        k_s: float, basis: Basis, m_flow: float, w_sources: np.ndarray,
-        L_tot: float ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        k_s: float, basis: Basis, m_flow: float | np.ndarray,
+        w_sources: np.ndarray, L_tot: float
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Solve for the g-function under the MIFT boundary condition.
 
@@ -251,8 +258,9 @@ def _solve_MIFT(
         Thermal conductivity of the ground (in W/m.K).
     basis : Basis
         Basis for the thermal response factors.
-    m_flow : float
-        Total fluid mass flow rate through the borefield (in kg/s).
+    m_flow : float or array, 
+        Total fluid mass flow rate through the borefield. If an array, the
+        variable fluid mass flow rate g-functions are returned.
     w_sources : array
         Weight array for the borefield.
     L_tot : float
@@ -263,30 +271,46 @@ def _solve_MIFT(
     g_function : array
         g-Function values.
     q_b : array
-        (`n_times`,`n_boreholes`, `n_nodes`,) array of heat extraction rates.
+        (`n_times`,`n_boreholes`, `n_nodes`,) or
+        (`n_times`, `n_m_flow`, `n_boreholes`, `n_nodes`,) array of
+        heat extraction rates.
     T_b : array
-        (`n_times`,`n_boreholes`, `n_nodes`,) array of boehole wall
-        temperatures.
+        (`n_times`,`n_boreholes`, `n_nodes`,) or
+        (`n_times`, `n_m_flow`, `n_boreholes`, `n_nodes`,) array of
+        borehole wall temperatures.
 
     """
     n_times = len(time)             # Number of time steps
     n_sources = h_to_self.shape[-1] # Number of nodes in the borefield
 
+    # Determine the number of mass flow rates
+    if isinstance(m_flow, np.ndarray):
+        n_m_flow = len(m_flow)
+        g_function_shape = (n_times, n_m_flow, n_m_flow,)
+        profile_shape = (n_times, n_m_flow, n_sources,)
+    else:
+        n_m_flow = 1
+        m_flow = np.array([m_flow])
+        g_function_shape = (n_times, 1, 1,)
+        profile_shape = (n_times, 1, n_sources,)
+
     # Dimensionless heat extraction rate coefficients of the boreholes
-    heat_extraction_rate_coefficients = (
+    # [q_b](s) = [a_in] * T_{f,n,in} + [a_b] * [T_b]
+    a_in, a_b = zip(*(
         borefield._heat_extraction_rate_coefficients(
-            basis, basis.xi, m_flow)
-    )
-    heat_extraction_rate_coefficients = (
-        heat_extraction_rate_coefficients[0] / (2 * np.pi * k_s),
-        heat_extraction_rate_coefficients[1] / (2 * np.pi * k_s)
-    )
+            basis, basis.xi, _m_flow
+            ) for _m_flow in m_flow
+    ))
+    a_in = np.stack(a_in, axis=0) / (2 * np.pi * k_s)
+    a_b = np.stack(a_b, axis=0) / (2 * np.pi * k_s)
+
     # Dimensionless effective thermal resistance of the borefield based
     # on the inlet fluid temperature
-    R_field_in = 2 *  np.pi * k_s * (
-        borefield.effective_borefield_thermal_resistance(m_flow)
-        + 0.5 * L_tot / (np.abs(m_flow) * borefield.fluid.specific_heat())
-    )
+    R_field_in = 2 *  np.pi * k_s * np.array([
+        borefield.effective_borefield_thermal_resistance(_m_flow)
+        + 0.5 * L_tot / (np.abs(_m_flow) * borefield.fluid.specific_heat())
+        for _m_flow in m_flow
+        ])
 
     # Build interpolant for TRFs
     dt = np.diff(time, prepend=0.)
@@ -303,18 +327,72 @@ def _solve_MIFT(
         )(dt)
 
     # Initialize arrays for results
-    g_function = np.empty(n_times)
-    q_b = np.zeros((n_times, n_sources))
-    T_b = np.zeros((n_times, n_sources))
+    g_function = np.empty(g_function_shape)
+    q_b = np.zeros(profile_shape)
+    T_b = np.zeros(profile_shape)
 
     # Solve for the g-function
-    load_history = LoadHistoryReconstruction(time, h_to_self)
-    for k in range(n_times):
-        g_function[k], q_b[k], T_b[k] = _solve_time_step_MIFT(
-            load_history, h_to_self_dt[k], w_sources, L_tot,
-            R_field_in, heat_extraction_rate_coefficients)
+    for i, _m_flow in enumerate(m_flow):
+        load_history = LoadHistoryReconstruction(time, h_to_self)
+        for k in range(n_times):
+            g_function[k, i, i], q_b[k, i], T_b[k, i] = _solve_time_step_MIFT(
+                load_history, h_to_self_dt[k], w_sources, L_tot,
+                R_field_in[i], (a_in[i], a_b[i]))
+
+    # Solve for off-diagonal variable mass flow rate g-functions
+    if n_m_flow > 1:
+        Q = 2 * np.pi * k_s * L_tot
+        for i, _m_flow in enumerate(m_flow):
+            # Coefficient matrices for total heat extraction rate
+            # Q = b_in * T_{f,n,in} + [b_b] * [T_b]
+            b_in, b_b = borefield._network_total_heat_extraction_rate_coefficients(
+                basis, _m_flow
+                )
+            b_b = b_b.flatten()
+            # Effective borehole wall temperatures
+            which = np.arange(n_m_flow) != i
+            T_b_eff = _solve_variable_m_flow(
+                Q, T_b[:, which], R_field_in[i], (b_in, b_b))
+            g_function[:, i, which] = T_b_eff
 
     return g_function, q_b, T_b
+
+def _solve_variable_m_flow(
+        Q: float, T_b: np.ndarray, R_field_in: np.ndarray,
+        network_total_heat_extraction_rate_coefficients: Tuple[np.ndarray, np.ndarray]
+        ) -> np.ndarray:
+    """
+    Solve for the off-diagonal variable mass flow rate g-functions.
+
+    Parameters
+    ----------
+    Q : float
+        Total heat extraction rate.
+    T_b : array
+        (..., `n_sources`,) array of borehole
+        wall temperatures.
+    R_field_in : float
+        Effective thermal resistance of the borefield based on the inlet
+        fluid temperature.
+    network_total_heat_extraction_rate_coefficients : tuple of array
+        Dimensionless heat extraction rate coefficients of the boreholes.
+
+    Returns
+    -------
+    g_function : array
+        Off-diagonal g-function values.
+
+    """
+    # Coefficient matrices for total heat extraction rate
+    # Q = b_in * T_{f,n,in} + [b_b] * [T_b]
+    b_in, b_b = network_total_heat_extraction_rate_coefficients
+
+    # Inlet fluid temperature
+    T_f_in = -(Q + T_b @ b_b) / b_in
+
+    # Effective borehole wall temperatures
+    T_b_eff = T_f_in - R_field_in
+    return T_b_eff
 
 
 def _solve_UBWT(
