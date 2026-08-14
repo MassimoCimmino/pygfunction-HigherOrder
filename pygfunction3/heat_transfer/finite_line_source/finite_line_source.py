@@ -24,7 +24,7 @@ def finite_line_source(
         p: npt.ArrayLike,
         source: Borefield | Borehole,
         n: int,
-        r_min: npt.ArrayLike |float | None = None,
+        r_min: npt.ArrayLike | float | None = None,
         r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
         backend: str = 'recurrence',
         deg: int | None = None,
@@ -207,7 +207,7 @@ def _finite_line_source_recurrence(
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
-    if real_source or mirror_source:
+    if (real_source or mirror_source) and n > 1:
         binom = _pascal(n)
         _n, _k = np.tril_indices(n)
         exponent = np.zeros((n, n), dtype=int)
@@ -217,12 +217,18 @@ def _finite_line_source_recurrence(
     # Real integrals
     if real_source:
         J_real = _integral(u, L, r, s, n, deg=deg)
-        eta_real = 2 * s / L - 1
-        I += np.einsum('nk,...nk,...k->...n', binom, np.power.outer(eta_real, exponent), J_real)
+        if n > 1:
+            eta_real = 2 * s / L - 1
+            I += np.einsum('nk,...nk,...k->...n', binom, np.power.outer(eta_real, exponent), J_real)
+        else:
+            I += J_real
     if mirror_source:
         J_mirror = _integral(u, L, r_mirror, s_mirror, n, deg=deg)
-        eta_mirror = 2 * s_mirror / L - 1
-        I -= np.einsum('nk,...nk,...k->...n', binom, np.power.outer(eta_mirror, exponent), J_mirror)
+        if n > 1:
+            eta_mirror = 2 * s_mirror / L - 1
+            I -= np.einsum('nk,...nk,...k->...n', binom, np.power.outer(eta_mirror, exponent), J_mirror)
+        else:
+            I -= J_mirror
 
     return I
 
@@ -235,10 +241,10 @@ def _integral(
         n: int,
         deg: int | None = None
         ) -> np.ndarray:
-    if n == 0:
+    if n == 1:
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
         J = np.expand_dims(J_0, axis=-1)
-    elif n == 1:
+    elif n == 2:
         J_0 = _zeroth_order_finite_line_source(u, L, r, s, r_mirror=np.empty_like(r), s_mirror=np.empty_like(s), deg=deg, mirror_source=False)
         J_1 = _first_order_integral(u, L, r, s)
         J = np.stack([J_0, J_1], axis=-1)

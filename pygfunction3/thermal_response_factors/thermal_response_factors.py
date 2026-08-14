@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import numpy.typing as npt
 
-from ..heat_transfer.finite_line_source import finite_line_source
+from ..heat_transfer.finite_line_source import finite_line_source_to_borehole
 from ..basis import Basis
 from ..borehole import Borehole
 from ..borefield import Borefield
@@ -136,10 +136,7 @@ def thermal_response_factors_to_borehole(
         )
         return h
     elif backend == 'detailed':
-        p_target = target.position(basis.xi)
-        if isinstance(target, Borefield):
-            p_target = p_target.swapaxes(0, 1)
-        I = finite_line_source(time, alpha, p_target, source, basis.n_nodes, r_min=r_min, r_min_indices=r_min_indices, backend=fls_backend, deg=deg, real_source=real_source, mirror_source=mirror_source)
+        I = finite_line_source_to_borehole(time, alpha, target, source, basis, basis.n_nodes, r_min=r_min, r_min_indices=r_min_indices, backend=fls_backend, deg=deg, real_source=real_source, mirror_source=mirror_source)
         h = I @ basis._coefficients
         return h
     else:

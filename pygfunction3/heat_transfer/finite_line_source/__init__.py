@@ -5,6 +5,9 @@ from .finite_line_source import (
     _finite_line_source_recurrence,
     _integral
 )
+from .finite_line_source_to_borehole import (
+    finite_line_source_to_borehole,
+)
 from .first_order_finite_line_source import (
     first_order_finite_line_source,
     _first_order_finite_line_source,
