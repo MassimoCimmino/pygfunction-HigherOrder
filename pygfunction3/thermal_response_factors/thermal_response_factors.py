@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import numpy.typing as npt
 
-from ..heat_transfer.finite_line_source import finite_line_source_to_borehole
+from ..heat_transfer.finite_line_source import finite_line_source, finite_line_source_to_borehole
 from ..basis import Basis
 from ..borehole import Borehole
 from ..borefield import Borefield

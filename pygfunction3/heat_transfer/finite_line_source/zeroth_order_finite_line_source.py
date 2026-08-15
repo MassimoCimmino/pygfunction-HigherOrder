@@ -6,6 +6,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.integrate import quad_vec
 
+from .zeroth_order_steady_state_finite_line_source import zeroth_order_steady_state_finite_line_source
 from ._inner_integral import _zeroth_order_inner_integral
 from ...borehole import Borehole
 from ...borefield import Borefield
@@ -25,6 +26,10 @@ def zeroth_order_finite_line_source(
         mirror_source: bool = True
         ) -> np.ndarray:
     """Zeroth order finite line source solution."""
+    if time is np.inf:
+        return zeroth_order_steady_state_finite_line_source(
+            p, source, r_min=r_min, r_min_indices=r_min_indices, real_source=real_source, mirror_source=mirror_source
+        )
     if isinstance(time, list):
         time = np.asarray(time)
     # Lower bound of integration
@@ -39,15 +44,10 @@ def zeroth_order_finite_line_source(
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
-        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=None, r_min_indices=None)
+        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=r_min, r_min_indices=r_min_indices)
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
-
-    # Reshape inputs for broadcasting
-    shape_u = np.shape(u)
-    shape_s = np.shape(s)
-    u = np.reshape(u, shape_u + (1,) * len(shape_s))
 
     I_0 = _zeroth_order_finite_line_source(u, source.L, r, s, r_mirror, s_mirror, deg=deg, real_source=real_source, mirror_source=mirror_source)
 
@@ -66,6 +66,10 @@ def _zeroth_order_finite_line_source(
         mirror_source: bool = True
         ) -> np.ndarray:
     """Zeroth order finite line source solution."""
+    # Reshape inputs for broadcasting
+    shape_u = np.shape(u)
+    shape_s = np.shape(s)
+    u = np.reshape(u, shape_u + (1,) * len(shape_s))
     if deg is None:
         I_0 = __zeroth_order_finite_line_source_integral(u, L, r, s, r_mirror, s_mirror, real_source=real_source, mirror_source=mirror_source)
     else:

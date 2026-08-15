@@ -10,6 +10,7 @@ from scipy.integrate import quad_vec
 from scipy.linalg import pascal
 from scipy.special import erfc, erfcx
 
+from .steady_state_finite_line_source import steady_state_finite_line_source
 from .first_order_finite_line_source import _first_order_integral
 from .zeroth_order_finite_line_source import _zeroth_order_finite_line_source
 from ._inner_integral import _inner_integral
@@ -76,6 +77,11 @@ def finite_line_source(
         Finite line source solution up to order n at the target points and times.
 
     """
+    if time is np.inf:
+        return steady_state_finite_line_source(
+            p, source, n, r_min=r_min, r_min_indices=r_min_indices,
+            backend=backend, real_source=real_source, mirror_source=mirror_source
+        )
     if isinstance(time, list):
         time = np.asarray(time)
     # Lower bound of integration
@@ -90,24 +96,15 @@ def finite_line_source(
     # Mirror points
     if mirror_source:
         p_mirror = mirror_point(p)
-        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=None, r_min_indices=None)
+        r_mirror, s_mirror = source.radial_axial_position(p_mirror, r_min=r_min, r_min_indices=r_min_indices)
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
 
-    # Reshape inputs for broadcasting
-    shape_u = np.shape(u)
-    shape_s = np.shape(s)
-    u = np.reshape(u, shape_u + (1,) * len(shape_s))
-
-    # Finite line source solution
-    if backend.lower() == 'recurrence':
-        I = _finite_line_source_recurrence(u, source.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
-    elif backend.lower() == 'integral':
-        I = _finite_line_source_integral(u, source.L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
-    else:
-        warnings.warn(f"Invalid backend '{backend}' for finite line source solution. Falling back to recurrence method.")
-        I = _finite_line_source_recurrence(u, source.L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+    I = _finite_line_source(
+        u, source.L, r, s, r_mirror, s_mirror, source, n,
+        backend=backend, deg=deg, real_source=real_source, mirror_source=mirror_source
+    )
 
     return I
 
@@ -116,6 +113,75 @@ def _boundary_integral(u: np.ndarray, r: np.ndarray, s: np.ndarray) -> np.ndarra
     arg = s * s + r * r
     sqrt_arg = np.sqrt(arg)
     return np.exp(-u * u * arg) * (1 / u - (sqrt_arg * np.sqrt(np.pi) * erfcx(u * sqrt_arg)))
+
+
+def _finite_line_source(
+        u: np.ndarray,
+        L: float | np.ndarray,
+        r: np.ndarray,
+        s: np.ndarray,
+        r_mirror: np.ndarray,
+        s_mirror: np.ndarray,
+        source: Borefield | Borehole,
+        n: int,
+        backend: str = 'recurrence',
+        deg: int | None = None,
+        real_source: bool = True,
+        mirror_source: bool = True
+        ) -> np.ndarray:
+    """
+    Finite line source solution up to order n.
+
+    Parameters
+    ----------
+    u : array
+        Lower bound of integration.
+    L : float or array
+        Length of the source borehole(s).
+    r : array
+        Radial position(s) of the target point(s).
+    s : array
+        Axial position(s) of the target point(s).
+    r_mirror : array
+        Radial position(s) of the mirror point(s).
+    s_mirror : array
+        Axial position(s) of the mirror point(s).
+    source : Borefield or Borehole
+        Source borefield or borehole.
+    n : int
+        Order of the solution.
+    backend : str, optional
+        Backend for the finite line source solution. Must be either 'recurrence' or 'integral'. Default is 'recurrence'.
+    deg : int or None, optional
+        Degree of the approximation for the zeroth-order finite line source solution.
+        Only used if backend is 'recurrence'. Default is None, which means that no approximation is used.
+    real_source : bool, optional
+        Whether to include the contribution from the real source. Default is True.
+    mirror_source : bool, optional
+        Whether to include the contribution from the mirror source. Default is True.
+
+    Returns
+    -------
+    I : ndarray
+        Finite line source solution up to order n at the target points and times.
+
+    """
+
+    # Reshape inputs for broadcasting
+    shape_u = np.shape(u)
+    shape_s = np.shape(s)
+    u = np.reshape(u, shape_u + (1,) * len(shape_s))
+
+    # Finite line source solution
+    if backend.lower() == 'recurrence':
+        I = _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+    elif backend.lower() == 'integral':
+        I = _finite_line_source_integral(u, L, r, s, r_mirror, s_mirror, n, real_source=real_source, mirror_source=mirror_source)
+    else:
+        warnings.warn(f"Invalid backend '{backend}' for finite line source solution. Falling back to recurrence method.")
+        I = _finite_line_source_recurrence(u, L, r, s, r_mirror, s_mirror, n, deg=deg, real_source=real_source, mirror_source=mirror_source)
+
+    return I
 
 
 def _finite_line_source_integrand(

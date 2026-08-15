@@ -6,6 +6,9 @@ import numpy as np
 import numpy.typing as npt
 from scipy.special import erfc
 
+from .first_order_steady_state_finite_line_source import (
+    first_order_steady_state_finite_line_source,
+)
 from .zeroth_order_finite_line_source import (
     _zeroth_order_finite_line_source,
 )
@@ -19,13 +22,17 @@ def first_order_finite_line_source(
         alpha: float,
         p: npt.ArrayLike,
         source: Borefield | Borehole,
-        r_min: npt.ArrayLike |float | None = None,
+        r_min: npt.ArrayLike | float | None = None,
         r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
         deg: int | None = None,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
     """First order finite line source solution."""
+    if time is np.inf:
+        return first_order_steady_state_finite_line_source(
+            p, source, r_min=r_min, r_min_indices=r_min_indices, real_source=real_source, mirror_source=mirror_source
+        )
     if isinstance(time, list):
         time = np.asarray(time)
     # Lower bound of integration
@@ -44,11 +51,6 @@ def first_order_finite_line_source(
     else:
         r_mirror = np.empty(p.shape[:-1])
         s_mirror = np.empty(p.shape[:-1])
-
-    # Reshape inputs for broadcasting
-    shape_u = np.shape(u)
-    shape_s = np.shape(s)
-    u = np.reshape(u, shape_u + (1,) * len(shape_s))
 
     # Thermal response factor
     I_1 = _first_order_finite_line_source(u, source.L, r, s, r_mirror, s_mirror, deg=deg, real_source=real_source, mirror_source=mirror_source)
@@ -70,6 +72,11 @@ def _first_order_finite_line_source(
         mirror_source: bool = True
         ) -> np.ndarray:
     """First order finite line source solution."""
+    # Reshape inputs for broadcasting
+    shape_u = np.shape(u)
+    shape_s = np.shape(s)
+    u = np.reshape(u, shape_u + (1,) * len(shape_s))
+
     shape = np.broadcast_shapes(np.shape(u), np.shape(s))
     if real_source:
         if J_0_real is None:
