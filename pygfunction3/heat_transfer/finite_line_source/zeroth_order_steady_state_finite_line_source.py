@@ -13,13 +13,12 @@ from ...utils import mirror_point
 def zeroth_order_steady_state_finite_line_source(
         p: npt.ArrayLike,
         source: Borefield | Borehole,
-        r_min: npt.ArrayLike |float | None = None,
+        r_min: npt.ArrayLike | float | None = None,
         r_min_indices: Tuple[npt.ArrayLike, npt.ArrayLike] | npt.ArrayLike | None = None,
         real_source: bool = True,
         mirror_source: bool = True
         ) -> np.ndarray:
     """Zeroth order steady-state finite line source solution."""
-
     # Real points
     if real_source:
         r, s = source.radial_axial_position(p, r_min=r_min, r_min_indices=r_min_indices)

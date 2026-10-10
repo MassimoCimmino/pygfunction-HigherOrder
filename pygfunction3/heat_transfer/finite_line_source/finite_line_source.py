@@ -102,7 +102,7 @@ def finite_line_source(
         s_mirror = np.empty(p.shape[:-1])
 
     I = _finite_line_source(
-        u, source.L, r, s, r_mirror, s_mirror, source, n,
+        u, source.L, r, s, r_mirror, s_mirror, n,
         backend=backend, deg=deg, real_source=real_source, mirror_source=mirror_source
     )
 
@@ -122,7 +122,6 @@ def _finite_line_source(
         s: np.ndarray,
         r_mirror: np.ndarray,
         s_mirror: np.ndarray,
-        source: Borefield | Borehole,
         n: int,
         backend: str = 'recurrence',
         deg: int | None = None,
@@ -146,8 +145,6 @@ def _finite_line_source(
         Radial position(s) of the mirror point(s).
     s_mirror : array
         Axial position(s) of the mirror point(s).
-    source : Borefield or Borehole
-        Source borefield or borehole.
     n : int
         Order of the solution.
     backend : str, optional
@@ -235,7 +232,6 @@ def _finite_line_source_integrand(
             shape = np.broadcast_shapes(np.shape(u), np.shape(s)) + (n,)
             dh = np.zeros(shape)
             return dh
-
     return integrand
 
 
